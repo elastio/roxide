@@ -273,7 +273,7 @@ impl BlockBasedOptionsMustOutliveDB {
 /// }
 /// ```
 pub struct Options {
-    pub(crate) inner: *mut ffi::rocksdb_options_t,
+    pub inner: *mut ffi::rocksdb_options_t,
     pub(crate) outlive: OptionsMustOutliveDB,
 }
 
@@ -303,7 +303,7 @@ pub struct Options {
 /// let _ = DB::destroy(&Options::default(), path);
 /// ```
 pub struct WriteOptions {
-    pub(crate) inner: *mut ffi::rocksdb_writeoptions_t,
+    pub inner: *mut ffi::rocksdb_writeoptions_t,
 }
 
 /// Optionally wait for the memtable flush to be performed.
@@ -327,17 +327,21 @@ pub struct WriteOptions {
 /// let _ = DB::destroy(&Options::default(), path);
 /// ```
 pub struct FlushOptions {
-    pub(crate) inner: *mut ffi::rocksdb_flushoptions_t,
+    pub inner: *mut ffi::rocksdb_flushoptions_t,
 }
 
 /// For configuring block-based file storage.
 pub struct BlockBasedOptions {
+<<<<<<< HEAD
     pub(crate) inner: *mut ffi::rocksdb_block_based_table_options_t,
     outlive: BlockBasedOptionsMustOutliveDB,
+=======
+    pub inner: *mut ffi::rocksdb_block_based_table_options_t,
+>>>>>>> dfc48d6 (Make the `inner` field in the options types `pub`)
 }
 
 pub struct ReadOptions {
-    pub(crate) inner: *mut ffi::rocksdb_readoptions_t,
+    pub inner: *mut ffi::rocksdb_readoptions_t,
     iterate_upper_bound: Option<Vec<u8>>,
     iterate_lower_bound: Option<Vec<u8>>,
 }
