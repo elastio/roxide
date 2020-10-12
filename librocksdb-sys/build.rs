@@ -139,6 +139,9 @@ fn build_rocksdb() {
         lib_sources.push("util/crc32c_arm64.cc")
     }
 
+    // All targets support thread-local storage
+    config.define("ROCKSDB_SUPPORT_THREAD_LOCAL", Some("1"));
+
     if target.contains("darwin") {
         config.define("OS_MACOSX", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
