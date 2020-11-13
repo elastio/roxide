@@ -21,8 +21,10 @@ mod get_db_id;
 mod get_db_ptr;
 mod get_labels;
 mod get_prop;
+mod get_seq_num;
 mod iterate;
 mod key_exists;
+mod live_files;
 mod merge;
 // Most op code is in `ops`, but the `tx` module also needs to report op metrics for `commit` and
 // `rollback` operations
@@ -37,7 +39,7 @@ mod write;
 pub use self::{
     all_ops::*,
     begin_tx::BeginTrans,
-    checkpoint::Checkpoint,
+    checkpoint::CreateCheckpoint,
     compact::Compact,
     delete::{Delete, DeleteRange},
     flush::Flush,
@@ -45,8 +47,10 @@ pub use self::{
     get_db_id::GetDBId,
     get_db_ptr::GetDBPtr,
     get_prop::*,
+    get_seq_num::GetLatestSequenceNumber,
     iterate::{IterateAll, IteratePrefix, IterateRange},
     key_exists::KeyExists,
+    live_files::{GetLiveFiles, SstFile},
     merge::Merge,
     open::{DBOpen, DBOpenReadOnly},
     put::Put,

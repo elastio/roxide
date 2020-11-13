@@ -46,7 +46,7 @@ impl DB {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ops::DBOpen;
+    use crate::ops::{Compact, DBOpen};
     use crate::test::TempDBPath;
 
     #[test]
@@ -207,5 +207,137 @@ mod test {
         drop(db);
 
         Ok(())
+    }
+
+    /// When we set a db_path in DBOptions, that overrides the path specified in open or create
+    #[test]
+    fn db_path_overrides_open() -> Result<()> {
+        let path = TempDBPath::new();
+        let db_path = path.path().join("custom_path");
+        std::fs::create_dir_all(&db_path).unwrap();
+        let mut options = DBOptions::default();
+        options.add_column_family("foo");
+        options.add_column_family("bar");
+
+        // Override the database path with this explicit path
+        options.set_db_path(&db_path);
+
+        // Create the database and put some data in it then close it
+        {
+            let db = DB::create_new(&path, options)?;
+
+            // Put something in the DB so data files will have to be written
+            //
+            // Note compaction is required here otherwise they might not be flushed to SSTs
+            let cf = db.get_cf("foo").unwrap();
+            crate::test::fill_db(&db, &cf, 10_000)?;
+            db.compact_all(&cf, None)?;
+
+            let cf = db.get_cf("bar").unwrap();
+            crate::test::fill_db(&db, &cf, 10_000)?;
+            db.compact_all(&cf, None)?;
+        }
+
+        // Even though we set the db path, non-data files like manifest, options, and WAL
+        // are written tot he path that was passed to `create_new`
+        assert_dir_contains_files(path.path(), true);
+
+        // Because we generated some writes to the CFs and triggered compaction, there are
+        // files in the custom DB path also
+        assert_dir_contains_files(&db_path, true);
+
+        Ok(())
+    }
+
+    /// When we set a custom path for a ColumnFamily, that overrides any custom DB path or path
+    /// specified in open or create
+    #[test]
+    fn cf_path_overrides_open() -> Result<()> {
+        let path = TempDBPath::new();
+        let db_path = path.path().join("custom_path");
+        let foo_path = db_path.join("foo");
+        let bar_path = db_path.join("bar");
+        std::fs::create_dir_all(&db_path).unwrap();
+        std::fs::create_dir_all(&foo_path).unwrap();
+        std::fs::create_dir_all(&bar_path).unwrap();
+        let mut options = DBOptions::default();
+        options.add_column_family("foo");
+        options.add_column_family("bar");
+        options.set_db_path(&db_path);
+        options.set_column_family_path("foo", &foo_path);
+        options.set_column_family_path("bar", &bar_path);
+
+        // Create the database and put some data in it then close it
+        {
+            let db = DB::create_new(&path, options)?;
+
+            // Put something in the DB so data files will have to be written
+            //
+            // Note compaction is required here otherwise they might not be flushed to SSTs
+            let cf = db.get_cf("foo").unwrap();
+            crate::test::fill_db(&db, &cf, 10_000)?;
+            db.compact_all(&cf, None)?;
+
+            let cf = db.get_cf("bar").unwrap();
+            crate::test::fill_db(&db, &cf, 10_000)?;
+            db.compact_all(&cf, None)?;
+        }
+
+        // Even though we set the db path, non-data files like manifest, options, and WAL
+        // are written tot he path that was passed to `create_new`
+        assert_dir_contains_files(path.path(), true);
+
+        // Because we generated some writes to CF `foo` and triggered a compaction, there are
+        // files in `foo`s custom path also
+        assert_dir_contains_files(&foo_path, true);
+
+        // For the same reason, files in `bar`'s custom path
+        assert_dir_contains_files(&bar_path, true);
+
+        // Since both CFs had their paths overridden, the custom path for the DB should be
+        // empty, since there's nothing to write there
+        assert_dir_contains_files(&db_path, false);
+
+        Ok(())
+    }
+
+    fn assert_dir_contains_files(dir: &Path, contains: bool) {
+        use walkdir::WalkDir;
+
+        assert!(dir.exists(), "Directory {} doesn't exist", dir.display());
+
+        let mut has_file = false;
+
+        // Print the entire tree for debugging purposes.
+        //
+        // The directory is only said to contain files if it directly contains them; files in
+        // subdirectories don't count
+        for entry in WalkDir::new(dir) {
+            let entry = entry.unwrap();
+            println!(
+                "{}: {} ({:?})",
+                dir.display(),
+                entry.path().display(),
+                entry.file_type()
+            );
+        }
+
+        for entry in std::fs::read_dir(dir).unwrap() {
+            if let Ok(entry) = entry {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        has_file = true;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(
+            contains,
+            has_file,
+            "Directory {} does{} contain any files!",
+            dir.display(),
+            if has_file { "" } else { " not" }
+        );
     }
 }

@@ -255,6 +255,12 @@ impl CompactionJobInfo {
 /// go without saying also that if any of these handler functions panic, the process will crash
 /// catastrophically and the database files will be in a crash-consistent state.
 pub trait RocksDbEventListener: Send + Sync {
+    /// Called when a flush job completes.
+    ///
+    /// IMPORTANT NOTE: It seems that this event does not fire if `atomic_flush` is set to `true`.
+    /// It's not clear from the RocksDB docs if this is expected behavior or a bug.  If you need to
+    /// reliably be notified when all flushes happen, you need to investigate this more and figure
+    /// out the solutin.
     fn flush_completed(&self, _job_info: &FlushJobInfo) {}
 
     fn compaction_completed(&self, _job_info: &CompactionJobInfo) {}
@@ -358,6 +364,11 @@ mod test {
         let flush_count = listener.flushes.clone();
         let compact_count = listener.compactions.clone();
         options.set_event_listener(listener);
+
+        // It seems that when atomic flush is enabled, the flush call does not trigger the flush
+        // event.  That sucks because we use atomic flush by default, but this behavior is not
+        // related to testing that the events bridge works properly.
+        options.set_db_option("atomic_flush", "false");
 
         let db = DB::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();

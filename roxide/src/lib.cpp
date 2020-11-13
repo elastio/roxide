@@ -27,6 +27,10 @@ namespace rocksdb_hack {
 	    rocksdb::Transaction* rep;
 	};
 
+    struct rocksdb_dbpath_t {
+        rocksdb::DbPath rep;
+    };
+
 	struct rocksdb_readoptions_t {
 	    rocksdb::ReadOptions rep;
 	   // stack variables to set pointers to in ReadOptions
@@ -35,6 +39,7 @@ namespace rocksdb_hack {
 	};
 	struct rocksdb_writeoptions_t    { rocksdb::WriteOptions      rep; };
 	struct rocksdb_options_t         { rocksdb::Options           rep; };
+    struct rocksdb_flushoptions_t    { rocksdb::FlushOptions      rep; };
     }
 }
 
@@ -58,6 +63,10 @@ static rocksdb::Transaction* cast_to_tx_internal(struct rocksdb_hack::rocksdb_tr
     return tx->rep;
 }
 
+static rocksdb::DbPath* cast_to_db_path_internal(struct rocksdb_hack::rocksdb_dbpath_t* db_path) {
+    return &db_path->rep;
+}
+
 static rocksdb::Options* cast_to_options_internal(struct rocksdb_hack::rocksdb_options_t* options) {
     return &options->rep;
 }
@@ -67,6 +76,10 @@ static rocksdb::ReadOptions* cast_to_read_options_internal(struct rocksdb_hack::
 }
 
 static rocksdb::WriteOptions* cast_to_write_options_internal(struct rocksdb_hack::rocksdb_writeoptions_t* options) {
+    return &options->rep;
+}
+
+static rocksdb::FlushOptions* cast_to_flush_options_internal(struct rocksdb_hack::rocksdb_flushoptions_t* options) {
     return &options->rep;
 }
 
@@ -90,6 +103,10 @@ rocksdb::Transaction* cast_to_tx(::rocksdb_transaction_t* tx) {
     return cast_to_tx_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_transaction_t*>(tx));
 }
 
+rocksdb::DbPath* cast_to_db_path(::rocksdb_dbpath_t* db_path) {
+    return cast_to_db_path_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_dbpath_t*>(db_path));
+}
+
 rocksdb::Options* cast_to_options(::rocksdb_options_t* options) {
     return cast_to_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_options_t*>(options));
 }
@@ -102,6 +119,10 @@ rocksdb::ReadOptions* cast_to_read_options(::rocksdb_readoptions_t* options) {
 
 rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options) {
     return cast_to_write_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_writeoptions_t*>(options));
+}
+
+rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options) {
+    return cast_to_flush_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_flushoptions_t*>(options));
 }
 
 rocksdb::Slice string_as_slice(const char* string, size_t len) {

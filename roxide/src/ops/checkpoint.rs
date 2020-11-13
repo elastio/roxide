@@ -11,14 +11,14 @@ use std::ptr;
 
 /// Trait implemented by database types which support creating point-in-time snapshots of the
 /// database files on disk.
-pub trait Checkpoint: RocksOpBase {
+pub trait CreateCheckpoint: RocksOpBase {
     /// Checkpoints the value for `key` in `cf`, returning a Rocks-allocated buffer containing the value
     /// if found, or `None` if not found.
-    fn checkpoint(&self, path: impl AsRef<path::Path>) -> Result<checkpoint::Checkpoint>;
+    fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint>;
 }
 
-impl Checkpoint for DB {
-    fn checkpoint(&self, path: impl AsRef<path::Path>) -> Result<checkpoint::Checkpoint> {
+impl CreateCheckpoint for DB {
+    fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         op_metrics::instrument_db_op(
             self,
             op_metrics::DatabaseOperation::Checkpoint,
@@ -37,8 +37,8 @@ impl Checkpoint for DB {
     }
 }
 
-impl Checkpoint for TransactionDB {
-    fn checkpoint(&self, path: impl AsRef<path::Path>) -> Result<checkpoint::Checkpoint> {
+impl CreateCheckpoint for TransactionDB {
+    fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         op_metrics::instrument_db_op(
             self,
             op_metrics::DatabaseOperation::Checkpoint,
@@ -57,8 +57,8 @@ impl Checkpoint for TransactionDB {
     }
 }
 
-impl Checkpoint for OptimisticTransactionDB {
-    fn checkpoint(&self, path: impl AsRef<path::Path>) -> Result<checkpoint::Checkpoint> {
+impl CreateCheckpoint for OptimisticTransactionDB {
+    fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         // The optimistic transaction DB API is slightly different than either of the others.
         // See the comment in `put.rs` for the details
         op_metrics::instrument_db_op(
@@ -94,7 +94,7 @@ mod test {
 
         db.put(&cf, "foo", "bar", None)?;
 
-        let _checkpoint = db.checkpoint(path.path().join("mycheckpoint"))?;
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
 
         Ok(())
     }
@@ -107,7 +107,7 @@ mod test {
 
         db.put(&cf, "foo", "bar", None)?;
 
-        let _checkpoint = db.checkpoint(path.path().join("mycheckpoint"))?;
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
 
         Ok(())
     }
@@ -120,7 +120,7 @@ mod test {
 
         db.put(&cf, "foo", "bar", None)?;
 
-        let _checkpoint = db.checkpoint(path.path().join("mycheckpoint"))?;
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
 
         Ok(())
     }

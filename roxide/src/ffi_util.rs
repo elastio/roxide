@@ -54,6 +54,15 @@ pub(crate) fn make_result<T>(ok: T, err: *const c_char) -> Result<T> {
     }
 }
 
+pub(crate) unsafe fn string_from_char_ptr(string: *const libc::c_char) -> String {
+    // First copy this into a buffer we control
+    let string = CStr::from_ptr(string);
+
+    // TODO: If the conversion to string fails should we silently replace it with the dummy char
+    // like `to_string_lossy` does, or fail the operation?
+    string.to_string_lossy().to_string()
+}
+
 pub(crate) unsafe fn path_from_char_ptr(path: *const libc::c_char) -> PathBuf {
     // First copy this into a buffer we control
     let path = CStr::from_ptr(path).to_owned();

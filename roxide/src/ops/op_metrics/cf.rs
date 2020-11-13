@@ -27,7 +27,6 @@ pub(crate) enum ColumnFamilyOperation {
     DeleteRange,
     MultiDeleteRange,
     AsyncDeleteRange,
-    Flush,
     GetProperty,
     IterateAll,
     IterateRange,

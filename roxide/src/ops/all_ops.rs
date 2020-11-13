@@ -5,7 +5,7 @@
 
 use super::{
     begin_tx::BeginTrans,
-    checkpoint::Checkpoint,
+    checkpoint::CreateCheckpoint,
     compact::Compact,
     delete::Delete,
     flush::Flush,
@@ -49,7 +49,16 @@ pub trait ReadOnlyDBOps:
 /// `DBOpenRead` operation.  Thus `ReadOnlyDBOps` and `DBOps` are separate traits, unrelated by
 /// inheritance although obviously overlapping considerably
 pub trait DBOps:
-    DataOps + GetDBPtr + GetDBId + GetProperty + Stats + Checkpoint + Compact + Flush + DBOpen + Write
+    DataOps
+    + GetDBPtr
+    + GetDBId
+    + GetProperty
+    + Stats
+    + CreateCheckpoint
+    + Compact
+    + Flush
+    + DBOpen
+    + Write
 {
 }
 

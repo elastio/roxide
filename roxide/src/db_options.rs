@@ -6,27 +6,6 @@
 //! So we take advantage of a feature in the RocksDB C++ API to set options arbitrarily from a set
 //! of string name/value pairs.  Of course that means C++ STL, so the conversion is a bit hairy but
 //! the increase in convenience is SO worth it.
-
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::ffi::c_void;
-use std::fmt::{self, Display};
-use std::iter::FromIterator;
-use std::ptr;
-
-// Re-export the RocksDB options types for convenience, so callers don't take any direct
-// dependencies on the underlying `rocksdb` crate
-pub use rocksdb::{
-    self, BlockBasedIndexType, BlockBasedOptions, DBCompactionStyle, DBCompressionType,
-    DBRecoveryMode, FlushOptions, MemtableFactory, Options, PlainTableFactoryOptions, ReadOptions,
-    WriteOptions,
-};
-
-use maplit::hashmap;
-use num_traits::PrimInt;
-use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-
 use crate::error::prelude::*;
 use crate::events;
 use crate::ffi;
@@ -35,6 +14,28 @@ use crate::handle;
 use crate::logging;
 use crate::merge;
 use crate::ops::StatsLevel;
+use cheburashka::logging::prelude::*;
+use maplit::hashmap;
+use num_traits::PrimInt;
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
+use std::ffi::c_void;
+use std::fmt::{self, Display};
+use std::iter::FromIterator;
+use std::ptr;
+use std::{
+    borrow::Borrow,
+    path::{Path, PathBuf},
+};
+use std::{collections::HashMap, ffi::CString};
+
+// Re-export the RocksDB options types for convenience, so callers don't take any direct
+// dependencies on the underlying `rocksdb` crate
+pub use rocksdb::{
+    self, BlockBasedIndexType, BlockBasedOptions, DBCompactionStyle, DBCompressionType, DBPath,
+    DBRecoveryMode, FlushOptions, MemtableFactory, Options, PlainTableFactoryOptions, ReadOptions,
+    WriteOptions,
+};
 
 pub mod prelude {
     // Most code will want all of our extension traits on the RocksDB options types
@@ -55,6 +56,10 @@ cpp! {{
     #include "src/db_options.h"
     #include "src/db_options.cpp"
 }}
+
+extern "C" {
+    fn set_cf_path(options: *mut ffi::rocksdb_options_t, db_path: *mut ffi::rocksdb_dbpath_t);
+}
 
 // We use this `RocksObject` trait to plug in and type wrapping a RocksDB FFI handle type into the
 // rest of our code.  All of our structs implement this themselves but the RocksDB options types
@@ -129,6 +134,13 @@ pub struct DBOptions {
     /// Database-wide options
     db_options: HashMap<String, String>,
 
+    /// Database-wide db_path, which will override the path specified in the call to `open*`
+    /// functions if not set to `None`.
+    ///
+    /// If set this will also apply to all column families, unless a column family has its own path
+    /// override in `column_family_paths`;
+    db_path: Option<PathBuf>,
+
     /// Column family options which will apply to all column families
     default_cf_options: HashMap<String, String>,
 
@@ -136,6 +148,11 @@ pub struct DBOptions {
     /// a `HashMap` of settings for that CF.  Each CF inherits settings from `default_cf_options`
     /// unless they are explicitly overridden.
     column_families: HashMap<String, HashMap<String, String>>,
+
+    /// Custom database paths per column family.  The key is the same as `column_families`: the
+    /// name of the CF.  If a given column family doesn't have a path in this field, then `db_path`
+    /// is used; if `db_path` is `None`, then whatever path was passed to `open*` is used.
+    column_family_paths: HashMap<String, PathBuf>,
 
     stats_level: StatsLevel,
 
@@ -177,6 +194,8 @@ impl DBOptions {
         DBOptions {
             db_options: Self::make_owned_hash_map(db_options),
 
+            db_path: None,
+
             default_cf_options: Self::make_owned_hash_map(default_cf_options),
 
             column_families: HashMap::from_iter(
@@ -185,6 +204,8 @@ impl DBOptions {
                     .iter()
                     .map(|(k, v)| (k.to_string(), Self::make_owned_hash_map(v))),
             ),
+
+            column_family_paths: HashMap::new(),
 
             stats_level: StatsLevel::Disabled,
 
@@ -241,6 +262,12 @@ impl DBOptions {
         for (k, v) in options.iter() {
             self.db_options.insert(k.to_string(), v.to_string());
         }
+    }
+
+    /// Set a custom path for all DB files in all column families (unless a particular column
+    /// family has a path override)
+    pub fn set_db_path(&mut self, path: impl Into<PathBuf>) {
+        self.db_path = Some(path.into());
     }
 
     /// Adds additional default CF options, possibly overridding existing options if they have the same
@@ -325,6 +352,16 @@ impl DBOptions {
             .map(|o| Self::make_owned_hash_map(o.borrow()))
             .unwrap_or_else(HashMap::new);
         self.column_families.insert(name.to_string(), options);
+    }
+
+    /// Override the path where data files for a given column family will be stored.
+    pub fn set_column_family_path<N, P>(&mut self, name: N, path: P)
+    where
+        N: ToString,
+        P: Into<PathBuf>,
+    {
+        self.column_family_paths
+            .insert(name.to_string(), path.into());
     }
 
     /// Gets the current block-based table factory options for a previously-added column family.
@@ -481,7 +518,10 @@ impl DBOptions {
 
         // Apply the DB and defualt CF options directly to this `Options` struct
         let default_block_options = self.get_default_cf_block_table_options()?;
-        let opts = opts.set_db_options_from_map(&self.db_options)?;
+        let mut opts = opts.set_db_options_from_map(&self.db_options)?;
+        if let Some(db_path) = self.db_path.as_ref() {
+            opts.set_db_path(db_path)?;
+        }
         let mut opts = opts.set_cf_options_from_map(&self.default_cf_options)?;
         if let Some(logger) = self.logger {
             if let Some(level) = self.log_level.to_level() {
@@ -518,6 +558,7 @@ impl DBOptions {
         }
 
         let merge_operators = self.merge_operators;
+        let column_family_paths = self.column_family_paths;
 
         // Callers should not generally create an explicit CF called `default`.  The `default` CF
         // always exists in all RocksDB databases, whether we add it or not.  However, for
@@ -567,6 +608,12 @@ impl DBOptions {
                 // If there's a merge operator for this CF, apply that now
                 if let Some((operator_name, full, partial)) = merge_operators.get(&name) {
                     cf_opts.set_merge_operator(&operator_name, *full, *partial);
+                }
+
+                // If there's a custom path for this CF, apply that too
+                if let Some(cf_path) = column_family_paths.get(&name) {
+                    debug!(cf_name = %name, cf_path = %cf_path.display(), "setting cf db path");
+                    cf_opts.set_cf_path(cf_path)?;
                 }
 
                 Ok((name, cf_opts))
@@ -682,13 +729,29 @@ impl PartialEq for DBOptions {
 
 impl Default for DBOptions {
     fn default() -> Self {
+        /***************************************
+         * IMPORTANT REMINDER!!!!!
+         *
+         * These default options are used in `roxide`, but they are overridden in `scalez-kv` in
+         * the `default.toml` config file.
+         *
+         * If changing these defaults, think if this should also be the default for scalez.  If so
+         * do not fail to make the change in `default.toml` in the `scalez-kv` project as well.
+         * */
         let db_opts = hashmap! {
             "max_background_compactions" => "4",
             "max_background_flushes" => "4",
             "max_subcompactions" => "4",
             "bytes_per_sync" => "8M",
             "create_if_missing" => "true",
-            "create_missing_column_families" => "true"
+            "create_missing_column_families" => "true",
+
+            // https://github.com/facebook/rocksdb/wiki/Atomic-flush
+            //
+            // By default all CFs should be flushed together.  Otherwise writes to one CF might be
+            // persisted to disk and writes to another CF might be lost, in the event of a crash of
+            // the process
+            "atomic_flush" => "true"
         };
         let default_cf_opts = hashmap! {
             // Don't adhere to a strict hierarchy of L0->L1->L2..., optionally skip levels if
@@ -971,6 +1034,18 @@ pub trait OptionsExt {
         map: &HashMap<K, V>,
     ) -> Result<Options>;
 
+    /// Set the `db_paths` to a single path `path` without any size limit.
+    ///
+    /// NB: If this `Options` struct is being used to set column family options, then this DB path
+    /// is ignored by RocksDB.  Instead you must used `set_cf_path`
+    fn set_db_path<P: AsRef<Path>>(&mut self, path: P) -> Result<()>;
+
+    /// Set the `cf_paths` to a single path `path` without any size limit.
+    ///
+    /// NB: If this `Options` struct is being used to set database options, then this CF path
+    /// is ignored by RocksDB.  Instead you must used `set_db_path`
+    fn set_cf_path<P: AsRef<Path>>(&mut self, path: P) -> Result<()>;
+
     /// Sets a log level and logger implementation using a Rust trait.
     ///
     /// The specified `level` is the minimum level that will be logged.  Log events below this
@@ -1096,6 +1171,31 @@ impl OptionsExt for Options {
         }
     }
 
+    fn set_db_path<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let rocks_path = DBPath::new(path, 0).with_context(|| crate::error::RustRocksDBError {})?;
+        self.set_db_paths(&[rocks_path]);
+
+        Ok(())
+    }
+
+    fn set_cf_path<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let path = CString::new(path.as_ref().to_string_lossy().as_bytes()).unwrap();
+        let dbpath = unsafe { ffi::rocksdb_dbpath_create(path.as_ptr(), 0) };
+        assert!(
+            !dbpath.is_null(),
+            "Memory allocation failure creating DB path for '{}'",
+            path.to_string_lossy()
+        );
+
+        // Reach into this options struct to set cf_paths.  That's not exposed via the C bindings
+        unsafe {
+            set_cf_path(self.inner, dbpath);
+            ffi::rocksdb_dbpath_destroy(dbpath);
+        }
+
+        Ok(())
+    }
+
     fn set_logger(&mut self, min_level: log::Level, logger: Box<dyn logging::RocksDbLogger>) {
         let logger = logging::CppLoggerWrapper::wrap(logger);
 
@@ -1173,6 +1273,18 @@ mod tests {
         map.insert("bogus_option", "100");
 
         let _options = options.set_cf_options_from_map(&map).unwrap();
+    }
+
+    #[test]
+    fn test_set_db_path() {
+        let mut options = Options::default();
+        options.set_db_path("/tmp/foo").unwrap();
+    }
+
+    #[test]
+    fn test_set_cf_path() {
+        let mut options = Options::default();
+        options.set_cf_path("/tmp/foo").unwrap();
     }
 
     #[test]
@@ -1261,6 +1373,19 @@ mod tests {
         let mut options = DBOptions::default();
         options.set_stats_level(StatsLevel::Disabled);
         test_db_options_stats_level(options, StatsLevel::Disabled)
+    }
+
+    #[test]
+    fn db_options_custom_paths() -> Result<()> {
+        let mut options = DBOptions::default();
+        options.set_db_path("/tmp/db_path");
+        options.add_column_family("foo");
+        options.set_column_family_path("foo", "/tmp/db_path/foo");
+        let (_options, _cfs) = options.into_components()?;
+
+        // Testing that these options actually get applied properly by rocks is done in the DB
+        // tests, not here
+        Ok(())
     }
 
     fn test_db_options_stats_level(options: DBOptions, level: StatsLevel) -> Result<()> {

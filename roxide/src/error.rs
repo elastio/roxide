@@ -53,6 +53,15 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
+    /// An error returned by the `rust-rocksdb` wrapper.
+    ///
+    /// This contains just a string error message, with no additional context.
+    #[snafu(display("rocksdb: {}", source))]
+    RustRocksDBError {
+        source: rocksdb::Error,
+        backtrace: Backtrace,
+    },
+
     /// A database error in the form of a string.  Some RocksDB APIs don't produce anything more
     /// than a string error message.
     #[snafu(display("DB: {}\n{}", message, backtrace))]

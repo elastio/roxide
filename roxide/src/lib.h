@@ -27,9 +27,11 @@ rocksdb::DB* cast_to_db(::rocksdb_transactiondb_t* db);
 rocksdb::DB* cast_to_db(::rocksdb_optimistictransactiondb_t* db);
 rocksdb::ColumnFamilyHandle* cast_to_cf(::rocksdb_column_family_handle_t* cf);
 rocksdb::Transaction* cast_to_tx(::rocksdb_transaction_t* tx);
+rocksdb::DbPath* cast_to_db_path(::rocksdb_dbpath_t* db_path);
 rocksdb::Options* cast_to_options(::rocksdb_options_t* options);
 rocksdb::ReadOptions* cast_to_read_options(::rocksdb_readoptions_t* options);
 rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options);
+rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options);
 
 rocksdb::Slice string_as_slice(const char* string, size_t len);
 

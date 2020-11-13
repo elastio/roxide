@@ -34,13 +34,15 @@ tracing = "0.1" # Hopefully can figure out how to avoid needing this
 
 [dev-dependencies]
 assert_matches = "1.4"
+glob = "0.3.0"
+more-asserts = "0.2"
 num_cpus = "1"
 quickcheck = "0.9"
 quickcheck_macros = "0.9"
 rand = { version = "0.7", features = ["small_rng"] }
 tokio = { version = "0.2", features = ["full"] }
 uuid = "0.8.1"
-more-asserts = "0.2"
+walkdir = "2.3.1"
 
 [build-dependencies]
 cpp_build = "0.5"

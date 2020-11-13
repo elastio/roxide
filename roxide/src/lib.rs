@@ -38,6 +38,7 @@ pub mod future {
 }
 
 // Export the types we want to share from each module here at the root of the crate
+use cheburashka::logging::prelude::*;
 pub use checkpoint::Checkpoint;
 pub use checkpoint::*;
 pub use db::*;
@@ -91,12 +92,16 @@ impl TempDBPath {
 
 impl Drop for TempDBPath {
     fn drop(&mut self) {
+        trace!(temp_dir = %self.temp_dir.path().display(),
+            "Destroying database in temp directory");
         // It's important not to panic inside `drop`
         let _dontcare = crate::db::DB::destroy(None, &self.temp_dir.path());
 
         // Some test cases cause other files to be created in a DB dir, not just the database
         // files themselves.  So in addition to the above, explicitly delete the entire
         // directory
+        trace!(temp_dir = %self.temp_dir.path().display(),
+            "Removing temp directory entirely");
         let _dontcare = std::fs::remove_dir_all(&self.temp_dir.path());
     }
 }

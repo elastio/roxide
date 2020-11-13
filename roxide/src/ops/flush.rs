@@ -3,12 +3,27 @@
 //! force the database to flush for exampel before persisting to S3.
 use super::op_metrics;
 use super::*;
-use crate::db::{self, db::*, opt_txdb::*, txdb::*};
+use crate::db::{self, DBLike};
 use crate::ffi;
 use crate::handle::{self, RocksObject, RocksObjectDefault};
+use crate::status;
 use crate::Result;
 use once_cell::sync::OnceCell;
 use std::ptr;
+
+cpp! {{
+    #include "src/ops/flush.h"
+    #include "src/ops/flush.cpp"
+}}
+
+extern "C" {
+    fn flush_db(
+        db_ptr: *mut libc::c_void,
+        options: *const ffi::rocksdb_flushoptions_t,
+        cfs: *mut *mut ffi::rocksdb_column_family_handle_t,
+        cf_len: libc::size_t,
+    ) -> status::CppStatus;
+}
 
 /// The options specific to a `Flush` operation
 ///
@@ -66,78 +81,83 @@ pub trait Flush: RocksOpBase {
         &self,
         cf: &CF,
         options: O,
+    ) -> Result<()> {
+        self.flush_cfs(std::slice::from_ref(cf), options)
+    }
+
+    /// Forces multiple column families to flush all data to disk.
+    ///
+    /// if atomic flush is enabled, then the flush will either flush all column families
+    /// successfully, or fail
+    fn flush_cfs<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
+        &self,
+        cfs: &[CF],
+        options: O,
     ) -> Result<()>;
-}
 
-impl Flush for DB {
-    fn flush<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
-        &self,
-        cf: &CF,
-        options: O,
-    ) -> Result<()> {
-        op_metrics::instrument_cf_op(
-            cf,
-            op_metrics::ColumnFamilyOperation::Flush,
-            move |_reporter| {
-                let options = FlushOptions::from_option(options.into());
+    /// Flush all column families in this database.
+    ///
+    /// if atomic flush is enabled, then the flush will either flush all column families
+    /// successfully, or fail
+    fn flush_all<O: Into<Option<FlushOptions>>>(&self, options: O) -> Result<()>
+    where
+        Self: DBLike,
+    {
+        let cf_names = self.get_cf_names();
+        let cfs = cf_names
+            .into_iter()
+            .map(|cf_name| {
+                self.get_cf(cf_name).unwrap_or_else(|| {
+                    panic!("BUG: get_cf_names returned CF '{}', but call to `get_cf` with that name failed",
+                        cf_name);
+                })
+            })
+            .collect::<Vec<_>>();
 
-                unsafe {
-                    ffi_try!(ffi::rocksdb_flush_cf(
-                        self.rocks_ptr().as_ptr(),
-                        options.rocks_ptr().as_ptr(),
-                        cf.rocks_ptr().as_ptr(),
-                    ))?;
-                }
-
-                Ok(())
-            },
-        )
+        self.flush_cfs(&cfs, options)
     }
 }
 
-// I know what you're thinking: "where is the `TransactionDB` impl"?  The Rocks C FFI doesn't have
-// a flush function that takes a `rocksdb_transactiondb_t` pointer.  I'm pretty sure it's
-// supported in the C++ code but it somehow fell through the cracks in the C bindings.  The only
-// reason it works on `OptimisticTransactionDB` is because it's possible to get the base DB handle
-// for an optimistic db.
-//
-// For now there's a dummy impl that panics; someday a proper implementation needs to be provided
-impl Flush for TransactionDB {
-    fn flush<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
+impl<T: DBLike + GetDBPtr> Flush for T {
+    fn flush_cfs<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
         &self,
-        _cf: &CF,
-        _options: O,
-    ) -> Result<()> {
-        unimplemented!()
-    }
-}
-
-impl Flush for OptimisticTransactionDB {
-    fn flush<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
-        &self,
-        cf: &CF,
+        cfs: &[CF],
         options: O,
     ) -> Result<()> {
-        let options = FlushOptions::from_option(options.into());
+        op_metrics::instrument_db_op(self, op_metrics::DatabaseOperation::Flush, move || {
+            let options = FlushOptions::from_option(options.into());
 
-        unsafe {
-            Self::with_base_db(self.handle(), |base_db| {
-                ffi_try!(ffi::rocksdb_flush_cf(
-                    base_db,
+            let mut cf_ptrs = cfs
+                .iter()
+                .map(|cf| cf.rocks_ptr().as_ptr())
+                .collect::<Vec<_>>();
+
+            let status = unsafe {
+                flush_db(
+                    self.get_db_ptr(),
                     options.rocks_ptr().as_ptr(),
-                    cf.rocks_ptr().as_ptr(),
-                ))
-            })?;
-        }
+                    cf_ptrs.as_mut_ptr(),
+                    cf_ptrs.len() as libc::size_t,
+                )
+                .into_status()
+            };
 
-        Ok(())
+            if status.is_ok() {
+                // Operation succeeded
+                Ok(())
+            } else {
+                // Error
+                status.into_result()?;
+                unreachable!()
+            }
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::DBLike;
+    use crate::db::{db::*, opt_txdb::*, txdb::*};
     use crate::ops::{DBOpen, Put};
     use crate::test::TempDBPath;
 
@@ -150,6 +170,21 @@ mod test {
         db.put(&cf, "foo", "bar", None)?;
 
         db.flush(&cf, None)?;
+        db.flush_all(None)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn txdb_flush() -> Result<()> {
+        let path = TempDBPath::new();
+        let db = TransactionDB::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+
+        db.put(&cf, "foo", "bar", None)?;
+
+        db.flush(&cf, None)?;
+        db.flush_all(None)?;
 
         Ok(())
     }
@@ -163,6 +198,30 @@ mod test {
         db.put(&cf, "foo", "bar", None)?;
 
         db.flush(&cf, None)?;
+        db.flush_all(None)?;
+
+        Ok(())
+    }
+
+    /// This isn't really related to the Flush operation, but it's to prove to myself that Rocks
+    /// will still persist data to disk if the database object is dropped before an explicit Flush.
+    ///
+    /// I'm seeing behavior that makes me doubt that and I want to be reassured.
+    #[test]
+    fn flush_not_required_before_close() -> Result<()> {
+        let path = TempDBPath::new();
+
+        {
+            let db = DB::open(&path, None)?;
+            let cf = db.get_cf("default").unwrap();
+
+            db.put(&cf, "foo", "bar", None)?;
+        }
+
+        // `db` and `cf` went out of scope do the database was closed
+        let db = DB::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+        assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
         Ok(())
     }

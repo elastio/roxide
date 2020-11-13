@@ -21,6 +21,8 @@ pub(crate) enum DatabaseOperation {
     Write,
     Commit,
     Rollback,
+    Flush,
+    GetLiveFiles,
 }
 
 lazy_static! {

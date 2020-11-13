@@ -12,3 +12,7 @@
 #include "src/ffi_util.h"
 
 typedef UnorderedStringMap OptionsMap;
+
+extern "C" {
+    void set_cf_path(rocksdb_options_t* options, rocksdb_dbpath_t* db_path);
+}
