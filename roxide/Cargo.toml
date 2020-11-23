@@ -28,7 +28,7 @@ serde_json = "1.0"
 smallvec = "1.5"
 snafu = { version = "0.6", features = ["backtraces", "futures"] }
 strum = "0.19"
-strum_macros = "0.19"
+strum_macros = "0.20"
 tempfile = "3"
 tracing = "0.1" # Hopefully can figure out how to avoid needing this
 
