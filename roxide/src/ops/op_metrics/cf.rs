@@ -345,7 +345,7 @@ impl ColumnFamilyOperationMetricsReporter {
                 error!(target: "rocksdb_cf_op", op_name = self.op_name, %message, %backtrace, "RocksDB database error message");
             }
             other_error => {
-                error!(target: "rocksdb_cf_op", op_name = self.op_name, error = %other_error, "Error during RocksDB operation");
+                error!(target: "rocksdb_cf_op", op_name = self.op_name, error = log_error(other_error), "Error during RocksDB operation");
             }
         }
     }

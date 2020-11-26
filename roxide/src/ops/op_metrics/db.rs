@@ -180,7 +180,7 @@ fn report_error(err: &Error) {
             error!(target: "rocksdb_db_op", message = %message, %backtrace, "RocksDB database error message");
         }
         other_error => {
-            error!(target: "rocksdb_db_op", other_error = %other_error, "Error during RocksDB operation");
+            error!(target: "rocksdb_db_op", other_error = log_error(other_error), "Error during RocksDB operation");
         }
     };
 }
