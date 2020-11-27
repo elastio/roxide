@@ -88,7 +88,8 @@ pub struct Status {
 /// is passed between C++ and Rust code without an excess of hassle.
 #[repr(C)]
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct CppStatus {
+#[doc(hidden)] // this is only `pub` so it can be used with C++
+pub struct CppStatus {
     code: Code,
     subcode: SubCode,
     severity: Severity,
