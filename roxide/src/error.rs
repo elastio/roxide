@@ -5,7 +5,6 @@
 use crate::status;
 use cheburashka::metrics;
 use lazy_static::lazy_static;
-use snafu::IntoError;
 use snafu::{Backtrace, Snafu};
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -56,7 +55,7 @@ pub enum Error {
     /// An error returned by the `rust-rocksdb` wrapper.
     ///
     /// This contains just a string error message, with no additional context.
-    #[snafu(display("rocksdb: {}", source))]
+    #[snafu(display("RocksDB"))]
     RustRocksDBError {
         source: rocksdb::Error,
         backtrace: Backtrace,
@@ -70,14 +69,14 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
-    #[snafu(display("unable to enable statistics on this database because it was initialized with statistics disabled"))]
+    #[snafu(display("Unable to enable statistics on this database because it was initialized with statistics disabled"))]
     DBStatsDisabledError,
 
-    #[snafu(display("the property named '{}' was not found", property_name))]
+    #[snafu(display("The property named '{}' was not found", property_name))]
     PropertyNotFoundError { property_name: String },
 
     #[snafu(display(
-        "the property '{}' has an incompatible type: {}",
+        "The property '{}' has an incompatible type: {}",
         property_name,
         property_value
     ))]
@@ -98,30 +97,30 @@ pub enum Error {
         source: std::ffi::NulError,
     },
 
-    #[snafu(display("Error creating database path '{}': {}", path.display(), source))]
+    #[snafu(display("Error creating database path '{}'", path.display()))]
     PathMkdirFailed {
         path: PathBuf,
         source: std::io::Error,
     },
 
-    #[snafu(display("iopool: {}", source))]
+    #[snafu(display("I/O pool"), context(false))]
     IoPool { source: elasyncio::IoPoolError },
 
-    #[snafu(display("io: {}", source))]
+    #[snafu(display("I/O"), context(false))]
     Io { source: std::io::Error },
 
-    #[snafu(display("a callback reported an error: {}", source))]
+    #[snafu(display("A callback reported an error"))]
     CallbackError { source: AnyError },
 
-    #[snafu(display("the transaction object is still referenced by one or more other threads"))]
+    #[snafu(display("The transaction object is still referenced by one or more other threads"))]
     TransactionStillReferenced { backtrace: Backtrace },
 
-    #[snafu(display("observability: {}", source))]
+    #[snafu(display("Observability"), context(false))]
     Observability {
         source: cheburashka::CheburashkaError,
     },
 
-    #[snafu(display("invalid value '{}' for RocksDB metric '{}': {}", value, name, source))]
+    #[snafu(display("Invalid value '{}' for RocksDB metric '{}'", value, name))]
     InvalidMetricValue {
         name: Cow<'static, str>,
         value: String,
@@ -146,23 +145,5 @@ impl Error {
         counter.inc();
 
         error
-    }
-}
-
-impl From<elasyncio::IoPoolError> for Error {
-    fn from(err: elasyncio::IoPoolError) -> Self {
-        Self::report(IoPool {}.into_error(err))
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::report(Io {}.into_error(err))
-    }
-}
-
-impl From<cheburashka::CheburashkaError> for Error {
-    fn from(err: cheburashka::CheburashkaError) -> Self {
-        Self::report(Observability {}.into_error(err))
     }
 }
