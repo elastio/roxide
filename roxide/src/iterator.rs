@@ -1269,8 +1269,8 @@ mod test {
         }
 
         // Put the vecs in sorted order so we can easily find adjacent entries
-        all_keys.sort();
-        keys_in_db.sort();
+        all_keys.sort_unstable();
+        keys_in_db.sort_unstable();
 
         let mut iter = db.iterate_all(&cf, None)?;
         for (index, key) in all_keys.iter().enumerate() {

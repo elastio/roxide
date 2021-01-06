@@ -53,6 +53,7 @@ mod tests {
         let db = DB::open(&path, options)?;
 
         // The same messages entry should be present now.
+        #[allow(clippy::borrowed_box)]
         db.with_logger(|db_logger: Option<&Box<dyn RocksDbLogger + 'static>>| {
             let db_logger: &Box<dyn RocksDbLogger + 'static> =
                 db_logger.expect("Expected a non-None logger");

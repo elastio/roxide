@@ -433,7 +433,7 @@ mod test {
         }
 
         // Read back the keys.
-        if values.len() > 0 {
+        if !values.is_empty() {
             let max_value = u64_from_le_bytes(db.get(&max_cf, "max", None)?.unwrap().as_ref());
             let simple_value =
                 u64_from_le_bytes(db.get(&max_cf, "simple", None)?.unwrap().as_ref());

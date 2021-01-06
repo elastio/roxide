@@ -55,16 +55,16 @@ mod test {
         // column family handle.  It should still work.
         let path = TempDBPath::new();
         let mut options = DBOptions::default();
-        options.add_column_family("foo");
+        options.add_column_family("boo");
         options.add_column_family("bar");
 
         let db = DB::open(&path, options)?;
 
-        let foo = db.get_cf("foo").unwrap();
+        let boo = db.get_cf("boo").unwrap();
         let bar = db.get_cf("bar").unwrap();
 
         drop(db);
-        drop(foo);
+        drop(boo);
 
         // TODO: Once there are operations implemented, do Puts and Gets here
         drop(bar);
@@ -76,13 +76,13 @@ mod test {
     fn cf_name_correct() -> Result<()> {
         let path = TempDBPath::new();
         let mut options = DBOptions::default();
-        options.add_column_family("foo");
+        options.add_column_family("boo");
         options.add_column_family("bar");
 
         let db = DB::open(&path, options)?;
 
-        let foo = db.get_cf("foo").unwrap();
-        assert_eq!("foo", foo.name());
+        let boo = db.get_cf("boo").unwrap();
+        assert_eq!("boo", boo.name());
 
         let bar = db.get_cf("bar").unwrap();
         assert_eq!("bar", bar.name());
@@ -98,7 +98,10 @@ mod test {
 
         let db = DB::open(&path, options)?;
 
-        assert_eq!(vec!["default", "bar"].sort(), db.get_cf_names().sort());
+        assert_eq!(
+            &vec!["default", "bar"].sort_unstable(),
+            &db.get_cf_names().sort_unstable()
+        );
 
         Ok(())
     }
@@ -160,7 +163,7 @@ mod test {
     fn gets_cf_names() -> Result<()> {
         let path = TempDBPath::new();
         let mut options = DBOptions::default();
-        options.add_column_family("foo");
+        options.add_column_family("boo");
         options.add_column_family("bar");
 
         let db = DB::open(&path, options)?;
@@ -168,7 +171,7 @@ mod test {
         let cf_names = db.get_cf_names();
 
         assert!(cf_names.contains(&"default")); // All DBs have 'default' automatically
-        assert!(cf_names.contains(&"foo"));
+        assert!(cf_names.contains(&"boo"));
         assert!(cf_names.contains(&"bar"));
         Ok(())
     }
@@ -216,7 +219,7 @@ mod test {
         let db_path = path.path().join("custom_path");
         std::fs::create_dir_all(&db_path).unwrap();
         let mut options = DBOptions::default();
-        options.add_column_family("foo");
+        options.add_column_family("boo");
         options.add_column_family("bar");
 
         // Override the database path with this explicit path
@@ -229,7 +232,7 @@ mod test {
             // Put something in the DB so data files will have to be written
             //
             // Note compaction is required here otherwise they might not be flushed to SSTs
-            let cf = db.get_cf("foo").unwrap();
+            let cf = db.get_cf("boo").unwrap();
             crate::test::fill_db(&db, &cf, 10_000)?;
             db.compact_all(&cf, None)?;
 
@@ -255,16 +258,16 @@ mod test {
     fn cf_path_overrides_open() -> Result<()> {
         let path = TempDBPath::new();
         let db_path = path.path().join("custom_path");
-        let foo_path = db_path.join("foo");
+        let boo_path = db_path.join("boo");
         let bar_path = db_path.join("bar");
         std::fs::create_dir_all(&db_path).unwrap();
-        std::fs::create_dir_all(&foo_path).unwrap();
+        std::fs::create_dir_all(&boo_path).unwrap();
         std::fs::create_dir_all(&bar_path).unwrap();
         let mut options = DBOptions::default();
-        options.add_column_family("foo");
+        options.add_column_family("boo");
         options.add_column_family("bar");
         options.set_db_path(&db_path);
-        options.set_column_family_path("foo", &foo_path);
+        options.set_column_family_path("boo", &boo_path);
         options.set_column_family_path("bar", &bar_path);
 
         // Create the database and put some data in it then close it
@@ -274,7 +277,7 @@ mod test {
             // Put something in the DB so data files will have to be written
             //
             // Note compaction is required here otherwise they might not be flushed to SSTs
-            let cf = db.get_cf("foo").unwrap();
+            let cf = db.get_cf("boo").unwrap();
             crate::test::fill_db(&db, &cf, 10_000)?;
             db.compact_all(&cf, None)?;
 
@@ -287,9 +290,9 @@ mod test {
         // are written tot he path that was passed to `create_new`
         assert_dir_contains_files(path.path(), true);
 
-        // Because we generated some writes to CF `foo` and triggered a compaction, there are
-        // files in `foo`s custom path also
-        assert_dir_contains_files(&foo_path, true);
+        // Because we generated some writes to CF `boo` and triggered a compaction, there are
+        // files in `boo`s custom path also
+        assert_dir_contains_files(&boo_path, true);
 
         // For the same reason, files in `bar`'s custom path
         assert_dir_contains_files(&bar_path, true);

@@ -400,7 +400,7 @@ mod test {
 
     impl RocksObject<usize> for TestStruct {
         fn rocks_ptr(&self) -> NonNull<usize> {
-            self.0.clone()
+            self.0
         }
     }
 
@@ -408,9 +408,7 @@ mod test {
 
     fn default_usize_ptr() -> *mut usize {
         let ptr: *const usize = &DEFAULT_USIZE;
-        let ptr = ptr as *mut usize;
-
-        ptr
+        ptr as *mut usize
     }
 
     impl Default for TestStruct {

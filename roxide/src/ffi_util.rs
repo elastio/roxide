@@ -457,19 +457,23 @@ mod test {
     }
 
     /// Simple implementation that has some internal state
+    #[allow(clippy::mutex_atomic)]
     struct TraitImpl(Mutex<usize>);
 
     impl TraitImpl {
+        #[allow(clippy::mutex_atomic)]
         fn new(num: usize) -> Self {
             TraitImpl(Mutex::new(num))
         }
     }
 
     impl TestTrait for TraitImpl {
+        #[allow(clippy::mutex_atomic)]
         fn add_something(&self, num: usize) -> usize {
             *self.0.lock().unwrap() + num
         }
 
+        #[allow(clippy::mutex_atomic)]
         fn set_base(&self, num: usize) {
             let mut guard = self.0.lock().unwrap();
             *guard = num;
