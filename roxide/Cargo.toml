@@ -47,3 +47,6 @@ walkdir = "2.3.1"
 
 [build-dependencies]
 cpp_build = "0.5"
+
+[package.metadata.windows]
+exclude = true
