@@ -16,6 +16,11 @@
 mod cf;
 mod db;
 
+use {
+    pin_project::pin_project,
+    std::{future::Future, pin::Pin, task::Context, task::Poll},
+};
+
 pub(super) use cf::{instrument_async_cf_op, instrument_cf_op, ColumnFamilyOperation};
 pub(super) use db::{instrument_async_db_op, instrument_db_op, run_blocking_db_task};
 
@@ -24,7 +29,53 @@ pub(super) use db::{instrument_async_db_op, instrument_db_op, run_blocking_db_ta
 pub(crate) use db::{instrument_tx_op, DatabaseOperation};
 
 /// The type of `Future` which is returned by all of our async RocksDB operations.  This complex
-/// type is due to the fact that we wrap the `BlockingOpFuture` returned by `assuri-iopool` into
+/// type is due to the fact that we wrap the `BlockingOpFuture` returned by `elasyncio` into
 /// another type in order to instrument the future with `cheburashka` for metrics and log context.
 pub(super) type AsyncOpFuture<T, E = crate::Error> =
     cheburashka::logging::futures::Instrumented<crate::future::BlockingOpFuture<T, E>>;
+
+/// Ugly workaround to ensure that database-level async ops also invoke their error postprocessor
+/// on error.
+///
+/// For all CF-level ops, and synchronous DB-level ops, there's code in the [`cf`] and [`db`]
+/// modules, respectively, which ensures that if any ops fail with an error, that error is passed
+/// to the DB- or CF-level `ErrorPostprocessor` before being returned to the caller.  For
+/// architectural reasons relating to the fact that we require a concrete `Future` type instead of
+/// using `async-trait`, this isn't so easy for DB-level async operations.
+///
+/// Thus this future, which wraps the `AsyncOpFuture` which we normally return, and adds error
+/// postprocessing.
+#[pin_project]
+pub struct AsyncDbOpFuture<T> {
+    #[pin]
+    inner: AsyncOpFuture<T, crate::Error>,
+    #[pin]
+    error_postprocessor: Box<dyn crate::error::ErrorPostprocessor>,
+}
+
+impl<T> AsyncDbOpFuture<T> {
+    pub(super) fn wrap_op_future<P: crate::error::ErrorPostprocessor>(
+        error_postprocessor: P,
+        inner: AsyncOpFuture<T, crate::Error>,
+    ) -> Self {
+        Self {
+            inner,
+            error_postprocessor: Box::new(error_postprocessor),
+        }
+    }
+}
+
+impl<T> Future for AsyncDbOpFuture<T> {
+    type Output = Result<T, crate::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let me = self.project();
+        let inner = me.inner;
+        let error_postprocessor = me.error_postprocessor;
+
+        inner.poll(cx).map(|result: Result<T, crate::Error>| {
+            // If this failed make sure the error postprocessor is invoked
+            result.map_err(|e| error_postprocessor.postprocess_error(e))
+        })
+    }
+}

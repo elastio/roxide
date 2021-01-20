@@ -135,7 +135,7 @@ mod test {
 
         let sst = live_files.first().unwrap();
 
-        assert_eq!(cf.name(), sst.column_family_name);
+        assert_eq!(cf.name().as_str(), sst.column_family_name.as_str());
         assert!(
             sst.file_path.starts_with(path.path()),
             "Expected SST file path '{}' to start with DB path '{}'",

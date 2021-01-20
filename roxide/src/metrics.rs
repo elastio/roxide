@@ -17,6 +17,7 @@ use std::collections::HashMap;
 // more explicit.
 pub type DatabaseIntGauge = LabeledIntGauge<DatabaseLabelsStaticLabels>;
 pub type DatabaseIntCounter = LabeledIntCounter<DatabaseLabelsStaticLabels>;
+pub type DatabaseHistogram = LabeledHistogram<DatabaseLabelsStaticLabels>;
 
 pub type DatabaseOperationIntGauge = LabeledIntGauge<DatabaseOperationLabelsStaticLabels>;
 pub type DatabaseOperationIntCounter = LabeledIntCounter<DatabaseOperationLabelsStaticLabels>;

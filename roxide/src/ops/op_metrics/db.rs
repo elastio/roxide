@@ -2,11 +2,11 @@
 //!
 //! We don't have the same amount of detail on database metrics, as they tend not to be on a
 //! performance critical path.
-use super::AsyncOpFuture;
-use crate::db::DBLike;
+use super::AsyncDbOpFuture;
 use crate::labels::DatabaseOperationLabels;
 use crate::logging::LoggingContext;
 use crate::metrics;
+use crate::{db::DBLike, error::ErrorPostprocessor};
 use crate::{Error, Result};
 use cheburashka::{logging::prelude::*, metrics::*};
 use lazy_static::lazy_static;
@@ -28,25 +28,25 @@ pub(crate) enum DatabaseOperation {
 lazy_static! {
     static ref DB_OP_TOTAL_METRIC: metrics::DatabaseOperationIntCounter =
         DatabaseOperationLabels::register_int_counter(
-            "roxidedb_db_ops_total",
+            "rocksdb_db_ops_total",
             "The number of rocksdb database operations performed",
         )
         .unwrap();
     static ref DB_OP_RUNNING_METRIC: metrics::DatabaseOperationIntGauge =
         DatabaseOperationLabels::register_int_gauge(
-            "roxidedb_db_ops_running",
+            "rocksdb_db_ops_running",
             "The number of rocksdb database operations currently running",
         )
         .unwrap();
     static ref DB_OP_FAILED_METRIC: metrics::DatabaseOperationIntCounter =
         DatabaseOperationLabels::register_int_counter(
-            "roxidedb_db_ops_failed",
+            "rocksdb_db_ops_failed",
             "The number of rocksdb database operations failed",
         )
         .unwrap();
     static ref DB_OP_DURATION_METRIC: metrics::DatabaseOperationHistogram =
         DatabaseOperationLabels::register_histogram(
-            "roxidedb_db_op_duration_seconds",
+            "rocksdb_db_op_duration_seconds",
             "The duration in seconds of a database operation",
             buckets::io_latency_seconds(None)
         )
@@ -74,7 +74,7 @@ pub(crate) fn instrument_tx_op<R, F: FnOnce() -> Result<R>>(
     let op_name: &'static str = op.into();
     let labels = DatabaseOperationLabels::new_from_tx(tx, op_name);
 
-    instrument_db_op_internal(labels, func)
+    instrument_db_op_internal(labels, || func().map_err(|e| tx.postprocess_error(e)))
 }
 
 /// Instruments a database operation, by updating metrics and setting the appropriate logging
@@ -87,7 +87,7 @@ pub(crate) fn instrument_db_op<R, F: FnOnce() -> Result<R>>(
     let op_name: &'static str = op.into();
 
     let labels = DatabaseOperationLabels::new(db, op_name);
-    instrument_db_op_internal(labels, func)
+    instrument_db_op_internal(labels, || func().map_err(|e| db.postprocess_error(e)))
 }
 
 /// Instruments a database operation, by updating metrics and setting the appropriate logging
@@ -99,18 +99,21 @@ pub(crate) fn instrument_async_db_op<
     db: &impl DBLike,
     op: DatabaseOperation,
     func: F,
-) -> AsyncOpFuture<R> {
+) -> AsyncDbOpFuture<R> {
     let op_name: &'static str = op.into();
 
     let labels = DatabaseOperationLabels::new(db, op_name);
-    labels.clone().in_async_context(move || {
-        // It's not convenient to instrument the `Future` returned by `func` because that would
-        // require a much more complicated type signature and adding a custom `Future`
-        // implementation.  We can't use `async` here because our operations are exposed as traits
-        // and traits can't use `async`.  `async-trait` is a workaround but it defeats
-        // monomorphisatiion and inlining so it comes at too high a performance cost.
-        func(labels)
-    })
+    let db = db.clone();
+
+    // It's not convenient to instrument the `Future` returned by `func` because that would
+    // require a much more complicated type signature and adding a custom `Future`
+    // implementation.  We can't use `async` here because our operations are exposed as traits
+    // and traits can't use `async`.  `async-trait` is a workaround but it defeats
+    // monomorphisatiion and inlining so it comes at too high a performance cost.
+    //
+    // Instead we have a hand-rolled `Future` impl in `AsyncDbOpFuture` that ensures
+    // post-processing happens on DB ops
+    AsyncDbOpFuture::wrap_op_future(db, labels.clone().in_async_context(move || func(labels)))
 }
 
 /// Runs a blocking DB task on the thread pool.  Any database op that uses `instrument_async_db_op`
@@ -173,6 +176,15 @@ fn instrument_db_op_internal<R, F: FnOnce() -> Result<R>>(
 #[allow(clippy::cognitive_complexity)] // the complexity is low; clippy is seeing the macro expansion
 fn report_error(err: &Error) {
     match err {
+        Error::RocksDBConflict { .. } => {
+            // This looks like how a commit operation fails when there is a conflict between
+            // transactions on a database using optimistic locking.
+            //
+            // Usually this happens in a retriable transaction so don't blast the error log with
+            // it.  If this causes some higher-level operation to fail completely, that'll be the
+            // time to log it as an error
+            warn!(target: "rocksdb_db_op", "Busy error from RocksDB which usually indicates a conflict between transactions");
+        }
         Error::RocksDBError { status, backtrace } => {
             error!(target: "rocksdb_db_op", status = %status, %backtrace, "RocksDB database error");
         }

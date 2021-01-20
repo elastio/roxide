@@ -43,7 +43,7 @@ pub use checkpoint::Checkpoint;
 pub use checkpoint::*;
 pub use db::*;
 pub use db_options::*;
-pub use error::{Error, Result};
+pub use error::{Error, Result, TransactionRetryError};
 pub use events::*;
 pub use handle::RocksObject;
 pub use iterator::*;

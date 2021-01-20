@@ -50,18 +50,18 @@ pub(crate) enum ColumnFamilyOperation {
     AsyncWrapper,
 }
 
-const CF_OP_TOTAL_METRIC_NAME: &str = "roxidedb_cf_ops_total";
-const CF_OP_RUNNING_METRIC_NAME: &str = "roxidedb_cf_ops_running";
-const CF_OP_FAILED_METRIC_NAME: &str = "roxidedb_cf_ops_failed";
-const CF_OP_DURATION_METRIC_NAME: &str = "roxidedb_cf_op_duration_seconds";
+const CF_OP_TOTAL_METRIC_NAME: &str = "rocksdb_cf_ops_total";
+const CF_OP_RUNNING_METRIC_NAME: &str = "rocksdb_cf_ops_running";
+const CF_OP_FAILED_METRIC_NAME: &str = "rocksdb_cf_ops_failed";
+const CF_OP_DURATION_METRIC_NAME: &str = "rocksdb_cf_op_duration_seconds";
 
-const CF_OP_ITEM_TOTAL_METRIC_NAME: &str = "roxidedb_cf_op_items_total";
-const CF_OP_ITEM_FAILED_METRIC_NAME: &str = "roxidedb_cf_op_items_failed";
-const CF_OP_ITEM_DURATION_METRIC_NAME: &str = "roxidedb_cf_op_item_duration_seconds";
+const CF_OP_ITEM_TOTAL_METRIC_NAME: &str = "rocksdb_cf_op_items_total";
+const CF_OP_ITEM_FAILED_METRIC_NAME: &str = "rocksdb_cf_op_items_failed";
+const CF_OP_ITEM_DURATION_METRIC_NAME: &str = "rocksdb_cf_op_item_duration_seconds";
 
-const CF_OP_VECTOR_LEN_METRIC_NAME: &str = "roxidedb_cf_op_items_per_op";
-const CF_OP_KEY_LEN_METRIC_NAME: &str = "roxidedb_cf_op_key_len_bytes";
-const CF_OP_VALUE_LEN_METRIC_NAME: &str = "roxidedb_cf_op_value_len_bytes";
+const CF_OP_VECTOR_LEN_METRIC_NAME: &str = "rocksdb_cf_op_items_per_op";
+const CF_OP_KEY_LEN_METRIC_NAME: &str = "rocksdb_cf_op_key_len_bytes";
+const CF_OP_VALUE_LEN_METRIC_NAME: &str = "rocksdb_cf_op_value_len_bytes";
 
 lazy_static! {
     static ref CF_OP_TOTAL_METRIC: metrics::ColumnFamilyOperationIntCounter = ColumnFamilyOperationLabels::register_int_counter(
@@ -125,8 +125,12 @@ lazy_static! {
 
 /// Instruments a column family operation, by updating metrics and setting the appropriate logging
 /// context.
-pub(crate) fn instrument_cf_op<R, F: FnOnce(&ColumnFamilyOperationMetricsReporter) -> Result<R>>(
-    cf: &impl ColumnFamilyLike,
+pub(crate) fn instrument_cf_op<
+    CF: ColumnFamilyLike,
+    R,
+    F: FnOnce(&ColumnFamilyOperationMetricsReporter<CF>) -> Result<R>,
+>(
+    cf: &CF,
     op: ColumnFamilyOperation,
     func: F,
 ) -> Result<R> {
@@ -134,7 +138,7 @@ pub(crate) fn instrument_cf_op<R, F: FnOnce(&ColumnFamilyOperationMetricsReporte
 
     let labels = ColumnFamilyOperationLabels::new(cf, op_name);
     labels.in_context(|| {
-        let reporter = ColumnFamilyOperationMetricsReporter::new(labels.clone());
+        let reporter = ColumnFamilyOperationMetricsReporter::new(cf, labels.clone());
 
         reporter.run_op(func)
     })
@@ -143,10 +147,11 @@ pub(crate) fn instrument_cf_op<R, F: FnOnce(&ColumnFamilyOperationMetricsReporte
 /// Instruments a column family operation, by updating metrics and setting the appropriate logging
 /// context.
 pub(crate) fn instrument_async_cf_op<
+    CF: ColumnFamilyLike,
     R,
-    F: FnOnce(ColumnFamilyOperationMetricsReporter) -> crate::future::BlockingOpFuture<R>,
+    F: FnOnce(ColumnFamilyOperationMetricsReporter<CF>) -> crate::future::BlockingOpFuture<R>,
 >(
-    cf: &impl ColumnFamilyLike,
+    cf: &CF,
     op: ColumnFamilyOperation,
     func: F,
 ) -> AsyncOpFuture<R> {
@@ -154,7 +159,7 @@ pub(crate) fn instrument_async_cf_op<
 
     let labels = ColumnFamilyOperationLabels::new(cf, op_name);
     labels.in_context(|| {
-        let reporter = ColumnFamilyOperationMetricsReporter::new(labels.clone());
+        let reporter = ColumnFamilyOperationMetricsReporter::new(cf, labels.clone());
 
         reporter.run_async_op(func).in_current_span()
     })
@@ -162,9 +167,10 @@ pub(crate) fn instrument_async_cf_op<
 
 /// Passed to each column family op for which metrics are being recorded, allowing the op implementation to
 /// report detailed op-specific metrics information
-pub(crate) struct ColumnFamilyOperationMetricsReporter {
+pub(crate) struct ColumnFamilyOperationMetricsReporter<CF: ColumnFamilyLike> {
     op_name: &'static str,
-    op_total: LocalIntCounter,
+    cf: CF,
+    op_total: IntCounter,
     op_running: IntGauge,
     op_failed: LocalIntCounter,
     op_duration: LocalHistogram,
@@ -176,8 +182,8 @@ pub(crate) struct ColumnFamilyOperationMetricsReporter {
     op_value_len: LocalHistogram,
 }
 
-impl ColumnFamilyOperationMetricsReporter {
-    pub(super) fn new(labels: ColumnFamilyOperationLabels<'_>) -> Self {
+impl<CF: ColumnFamilyLike> ColumnFamilyOperationMetricsReporter<CF> {
+    pub(super) fn new(cf: &CF, labels: ColumnFamilyOperationLabels<'_>) -> Self {
         // Get labeled local versions of all the relevant metrics.  This is a very low cost
         // operation that doesn't perform any atomic operations or otherwise lock.
         // If any of these metrics end up not being modified, then the corresopnding `flush`
@@ -185,8 +191,18 @@ impl ColumnFamilyOperationMetricsReporter {
 
         ColumnFamilyOperationMetricsReporter {
             op_name: labels.op_name,
-            op_total: CF_OP_TOTAL_METRIC.apply_labels(&labels).unwrap().local(),
+            // This may seem excessive but in order to support instrumenting async operations we
+            // can't have any non-static lifetimes in this struct.  The performance implications
+            // are minimal since cloning a CF is just an Arc clone.
+            cf: cf.clone(),
+
+            // Total and running should not be local since they are always updated, and in the case
+            // of running we want the running count updates to be pushed to the global metrics
+            // state immediately so there's no performance gain in using local
+            op_total: CF_OP_TOTAL_METRIC.apply_labels(&labels).unwrap(),
             op_running: CF_OP_RUNNING_METRIC.apply_labels(&labels).unwrap(),
+
+            // All other metrics are local
             op_failed: CF_OP_FAILED_METRIC.apply_labels(&labels).unwrap().local(),
             op_duration: CF_OP_DURATION_METRIC.apply_labels(&labels).unwrap().local(),
             op_item_total: CF_OP_ITEM_TOTAL_METRIC
@@ -213,14 +229,17 @@ impl ColumnFamilyOperationMetricsReporter {
         }
     }
 
-    pub(super) fn run_op<R, F: FnOnce(&ColumnFamilyOperationMetricsReporter) -> Result<R>>(
+    pub(super) fn run_op<R, F: FnOnce(&ColumnFamilyOperationMetricsReporter<CF>) -> Result<R>>(
         self,
         func: F,
     ) -> Result<R> {
         self.op_total.inc();
         self.op_running.inc();
 
-        let result = self.op_duration.observe_closure_duration(|| func(&self));
+        let result = self
+            .op_duration
+            .observe_closure_duration(|| func(&self))
+            .map_err(|e| self.cf.postprocess_error(e));
 
         self.op_running.dec();
 
@@ -246,7 +265,7 @@ impl ColumnFamilyOperationMetricsReporter {
     /// performance metrics for async operations.
     pub(super) fn run_async_op<
         R,
-        F: FnOnce(ColumnFamilyOperationMetricsReporter) -> crate::future::BlockingOpFuture<R>,
+        F: FnOnce(ColumnFamilyOperationMetricsReporter<CF>) -> crate::future::BlockingOpFuture<R>,
     >(
         self,
         func: F,
@@ -264,7 +283,7 @@ impl ColumnFamilyOperationMetricsReporter {
     /// the metrics for this task are captured properly.
     pub fn run_blocking_task<F, T>(self, func: F) -> crate::future::BlockingOpFuture<T>
     where
-        F: FnOnce(&ColumnFamilyOperationMetricsReporter) -> Result<T> + Send + 'static,
+        F: FnOnce(&ColumnFamilyOperationMetricsReporter<CF>) -> Result<T> + Send + 'static,
         T: Send + 'static,
     {
         // even though this is async, it's run as a blocking task, which means we can use the same
@@ -323,7 +342,6 @@ impl ColumnFamilyOperationMetricsReporter {
         // len histogram before we flush everything else
         self.op_vector_len.observe(self.op_item_total.get() as f64);
 
-        self.op_total.flush();
         self.op_failed.flush();
         self.op_duration.flush();
         self.op_item_total.flush();
@@ -339,13 +357,32 @@ impl ColumnFamilyOperationMetricsReporter {
         self.op_failed.inc();
         match err {
             Error::RocksDBError { status, backtrace } => {
-                error!(target: "rocksdb_cf_op", op_name = self.op_name, %status, %backtrace, "RocksDB database error");
+                error!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(), %status, %backtrace, "RocksDB database error");
+            }
+            Error::RocksDBDeadlock { deadlock_paths, .. } => {
+                // This is usually something that happens in the context of a retriable
+                // transaction, so it's an expected error.  Log that at the warning level to avoid
+                // spooking whoever views the log output
+                warn!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(), deadlock_paths = %format!("{:#?}", deadlock_paths),
+                    "Deadlock in RocksDB transaction"
+                );
+            }
+            Error::RocksDBLockTimeout { .. } => {
+                // As with deadlocks, this is usually a sign of a transaction conflict.  If
+                // deadlock detection is enabled, normally conflicts result in deadlocks and fail
+                // with `RocksDBDeadlock`, however for pessimistic locking databases without
+                // deadlock detection, or in cases where the lock times out but there is no
+                // deadlock, this error can happen also.  It's also retriable and therefore should
+                // not be logged at the error level
+                warn!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(),
+                    "Lock timeout in RocksDB transaction"
+                );
             }
             Error::DatabaseError { message, backtrace } => {
-                error!(target: "rocksdb_cf_op", op_name = self.op_name, %message, %backtrace, "RocksDB database error message");
+                error!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(), %message, %backtrace, "RocksDB database error message");
             }
             other_error => {
-                error!(target: "rocksdb_cf_op", op_name = self.op_name, error = log_error(other_error), "Error during RocksDB operation");
+                error!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(), error = log_error(other_error), "Error during RocksDB operation");
             }
         }
     }

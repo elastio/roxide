@@ -29,31 +29,31 @@ use std::ptr;
 lazy_static! {
     static ref DB_TX_TOTAL_METRIC: rocks_metrics::DatabaseIntCounter =
         DatabaseLabels::register_int_counter(
-            "roxidedb_db_tx_count",
+            "rocksdb_db_tx_count",
             "The total number of RocksDB transactions created",
         )
         .unwrap();
     static ref DB_TX_OUTSTANDING_METRIC: rocks_metrics::DatabaseIntGauge =
         DatabaseLabels::register_int_gauge(
-            "roxidedb_db_tx_outstanding",
+            "rocksdb_db_tx_outstanding",
             "The total number of RocksDB transactions currently oustatnding",
         )
         .unwrap();
     static ref DB_TX_COMMITTED_METRIC: rocks_metrics::DatabaseIntCounter =
         DatabaseLabels::register_int_counter(
-            "roxidedb_db_tx_committed",
+            "rocksdb_db_tx_committed",
             "The total number of RocksDB transactions committed",
         )
         .unwrap();
     static ref DB_TX_ROLLED_BACK_METRIC: rocks_metrics::DatabaseIntCounter =
         DatabaseLabels::register_int_counter(
-            "roxidedb_db_tx_rolled_back",
+            "rocksdb_db_tx_rolled_back",
             "The total number of RocksDB transactions rolled back",
         )
         .unwrap();
     static ref DB_TX_ABANDONED_METRIC: rocks_metrics::DatabaseIntCounter =
         DatabaseLabels::register_int_counter(
-            "roxidedb_db_tx_abandoned",
+            "rocksdb_db_tx_abandoned",
             "The total number of RocksDB transactions abandoned",
         )
         .unwrap();
@@ -89,6 +89,12 @@ pub mod unsync {
     pub struct Transaction {
         inner: TransactionHandle,
 
+        /// The `ErrorPostprocessor` implementation that this transaction should use when reporting
+        /// errors.
+        ///
+        /// This will typically be the `DBLike` implementation that created this transaction
+        parent_error_processor: Box<dyn crate::error::ErrorPostprocessor>,
+
         /// The handle to the database this transaction is opened on.  Since struct members are dropped
         /// in order of declaration, this ensures the transaction handle `inner` is dropped first, so
         /// that even if the last remaining handle to the database is this one, the transaction still
@@ -113,6 +119,7 @@ pub mod unsync {
 
             let tx = Transaction {
                 inner: tx.into(),
+                parent_error_processor: Box::new(db.clone()),
                 _db: db_handle,
                 db_path_str: db.path_str().to_owned(),
                 db_id: db.db_id().to_owned(),
@@ -223,6 +230,12 @@ pub mod unsync {
 
         fn handle(&self) -> &Self::HandleType {
             &self.inner
+        }
+    }
+
+    impl crate::error::ErrorPostprocessor for Transaction {
+        fn postprocess_error(&self, err: crate::error::Error) -> crate::error::Error {
+            self.parent_error_processor.postprocess_error(err)
         }
     }
 }
@@ -350,6 +363,12 @@ pub mod sync {
 
         fn handle(&self) -> &Self::HandleType {
             &self.0
+        }
+    }
+
+    impl crate::error::ErrorPostprocessor for Transaction {
+        fn postprocess_error(&self, err: crate::error::Error) -> crate::error::Error {
+            self.with_tx(|tx| tx.postprocess_error(err))
         }
     }
 }

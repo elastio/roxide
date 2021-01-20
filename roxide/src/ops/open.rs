@@ -135,6 +135,10 @@ impl DBOpenReadOnly for DB {
     }
 }
 
+cpp! {{
+    #include "src/lib.h"
+}}
+
 impl DBOpen for TransactionDB {
     /// Opens a RocksDB database with transaction semantics
     ///
@@ -157,6 +161,32 @@ impl DBOpen for TransactionDB {
              column_family_handles| {
                 unsafe {
                     let tx_options = ffi::rocksdb_transactiondb_options_create();
+                    // These lines override the RocksDB defaults.  They are deliberately not
+                    // executed because for now we have no compelling need to override them.
+                    // However in testing related to https://github.com/elastio/elastio/pull/1332
+                    // this was useful to be able to override.  Therefore I'm leaving this here,
+                    // uncommented but disabled, so that these options can easily be overridden in
+                    // the future
+
+                    if false {
+                        // Default stripe count is 16.  A higher stripe count means less lock
+                        // contention when the number of CPU cores running operations is
+                        // substantially larger than 16.
+                        ffi::rocksdb_transactiondb_options_set_num_stripes(tx_options, 16);
+
+                        // Both lock timeouts default to 1 second.  When operations typically take
+                        // on the order of a millisecond or less this is reasonable.  If we ever
+                        // have situations where transaction locks are held for multiple seconds at
+                        // a time (like when the transaction is held open during an API call to
+                        // another service) this could become a problem.
+                        ffi::rocksdb_transactiondb_options_set_default_lock_timeout(
+                            tx_options, 1_000,
+                        );
+                        ffi::rocksdb_transactiondb_options_set_transaction_lock_timeout(
+                            tx_options, 1_000,
+                        );
+                    }
+
                     let result = ffi_try!(ffi::rocksdb_transactiondb_open_column_families(
                         options,
                         tx_options,

@@ -6,8 +6,12 @@ edition = "2018"
 publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["anyhow"]
 
 [dependencies]
+anyhow = { version = "1.0", optional = true }
+async-trait = "0.1.42"
 elasyncio = { path = "../elasyncio" }
 cheburashka = { path = "../cheburashka" }
 cpp = "0.5"
@@ -23,6 +27,8 @@ num_enum = "0.5.1"
 num-traits = "0.2"
 once_cell = "1.5"
 parking_lot = "0.11"
+pin-project = "0.4"
+rand = { version = "0.7", features = ["small_rng"] }
 rocksdb = { git = "https://github.com/elastio/rust-rocksdb", tag = "elastio-v6.11.4", default_features = false, features = ["lz4", "zstd"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -31,7 +37,9 @@ snafu = { version = "0.6", features = ["backtraces", "futures"] }
 strum = "0.20"
 strum_macros = "0.20"
 tempfile = "3"
+tokio = { version = "0.2", features = ["full"] }
 tracing = "0.1" # Hopefully can figure out how to avoid needing this
+try-again = { path = "../try-again", features = ["rand"] }
 
 [dev-dependencies]
 assert_matches = "1.4"
@@ -40,8 +48,6 @@ more-asserts = "0.2"
 num_cpus = "1"
 quickcheck = "0.9"
 quickcheck_macros = "0.9"
-rand = { version = "0.7", features = ["small_rng"] }
-tokio = { version = "0.2", features = ["full"] }
 uuid = "0.8.1"
 walkdir = "2.3.1"
 

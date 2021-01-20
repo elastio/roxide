@@ -175,7 +175,14 @@ impl Status {
     pub(crate) fn into_result(self) -> Result<()> {
         if self.is_ok() {
             Ok(())
+        } else if self.code == Code::TimedOut && self.subcode == SubCode::LockTimeout {
+            // There's a special error variant specifically for this case to make it more
+            // convenient for calling code to detect
+            error::RocksDBLockTimeout
+                .fail()
+                .map_err(error::Error::report)
         } else {
+            // Some other rocks error that doesn't indicate a lock timeout
             error::RocksDBError { status: self }
                 .fail()
                 .map_err(error::Error::report)

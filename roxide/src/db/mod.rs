@@ -34,6 +34,7 @@
 //! and have the `ColumnFamilyLike` implementations be able to easily call back into `DBLike` and
 //! get that info.  To do that `ColumnFamilyLike` has to hold some kind of reference to the DB, and
 //! that reference is implemented as an `Arc`.
+#![allow(clippy::rc_buffer)] // Using Arc<String> in an immutable way to save heap allocs, it's a legitimate strategy
 use crate::db_options::prelude::*;
 use crate::error::prelude::*;
 use crate::ffi;
@@ -55,7 +56,9 @@ cpp! {{
 
 /// The base trait for all database types.  Each database type is different enough that it has its
 /// own implementation, but wherever possible we code against the traits to keep things generic.
-pub trait DBLike: Clone + Send + Sync + crate::ops::DBOps + 'static {
+pub trait DBLike:
+    Clone + Send + Sync + crate::error::ErrorPostprocessor + crate::ops::DBOps + 'static
+{
     /// Each database exposes its own type representing its column families.
     type ColumnFamilyType: ColumnFamilyLike;
 
@@ -109,7 +112,12 @@ pub trait DBLike: Clone + Send + Sync + crate::ops::DBOps + 'static {
 /// Callers of this library should use this trait, though there are concrete implementations for
 /// each database type
 pub trait ColumnFamilyLike:
-    Clone + Sync + Send + RocksObject<ffi::rocksdb_column_family_handle_t> + 'static
+    Clone
+    + Sync
+    + Send
+    + crate::error::ErrorPostprocessor
+    + RocksObject<ffi::rocksdb_column_family_handle_t>
+    + 'static
 {
     /// Gets the path of this column family's database
     fn db_path(&self) -> &Path;
@@ -121,7 +129,12 @@ pub trait ColumnFamilyLike:
     fn db_id(&self) -> &str;
 
     /// Gets the name of this column family
-    fn name(&self) -> &str;
+    ///
+    /// This needs to be an `Arc<String>` instead of a `str` because the CF name is used as a label
+    /// for certain metrics and error logging in a way that would be too complicated to work with
+    /// if it were a `&str`.  This way an owned clone of the CF name is cheap to create and
+    /// simplifies the code that uses it.
+    fn name(&self) -> &Arc<String>;
 
     /// Returns the raw pointer to the RocksDB C++ class `rocksdb::ColumnFamilyHandle`.
     ///
@@ -159,7 +172,7 @@ struct DBLikeCore<HT> {
 /// Contains all the information on a column family.  Just like `DBLikeCore`, there is only one
 /// instance of this struct per column family; the actual `ColumnFamilyLike` implementation just
 /// holds an `Arc<>` so it's very cheap to clone and move around.
-struct ColumnFamilyLikeCore<HT> {
+struct ColumnFamilyLikeCore<DBType: DBLike> {
     // Rust drops members of a struct in order of declaration, so this indicates we
     // want the column family handle to be dropped before the database handle.  On the off
     // chance that the only remaining handle to the database is this one, we don't want the
@@ -168,9 +181,9 @@ struct ColumnFamilyLikeCore<HT> {
 
     /// All column family instances hold a reference to the DB they belong to, ensuring
     /// that DB will always be alive for as long as the CF is in scope somewhere
-    db: Arc<DBLikeCore<HT>>,
+    db: DBType,
 
-    name: String,
+    name: Arc<String>,
 }
 
 /// Called immediately after a database is opened, before it's returned to the caller.
@@ -244,11 +257,7 @@ macro_rules! rocks_db_impl {
 
             fn get_cf<T: AsRef<str>>(&self, name: T) -> Option<Self::ColumnFamilyType> {
                 self.inner.cfs.get(name.as_ref()).map(|cf_handle| {
-                    $cf_name::new(
-                        self.inner.clone(),
-                        cf_handle.clone(),
-                        name.as_ref().to_owned(),
-                    )
+                    $cf_name::new(self.clone(), cf_handle.clone(), name.as_ref().to_owned())
                 })
             }
 
@@ -284,20 +293,16 @@ macro_rules! rocks_db_impl {
 
         #[derive(Clone)]
         pub struct $cf_name {
-            inner: Arc<ColumnFamilyLikeCore<$handle_type>>,
+            inner: Arc<ColumnFamilyLikeCore<$name>>,
         }
 
         impl $cf_name {
-            fn new(
-                db: Arc<DBLikeCore<$handle_type>>,
-                cf_handle: ColumnFamilyHandle,
-                name: String,
-            ) -> Self {
+            fn new(db: $name, cf_handle: ColumnFamilyHandle, name: String) -> Self {
                 $cf_name {
                     inner: Arc::new(ColumnFamilyLikeCore {
                         handle: cf_handle,
                         db,
-                        name,
+                        name: Arc::new(name),
                     }),
                 }
             }
@@ -311,19 +316,26 @@ macro_rules! rocks_db_impl {
 
         impl ColumnFamilyLike for $cf_name {
             fn db_path(&self) -> &Path {
-                &self.inner.db.path
+                &self.inner.db.path()
             }
 
             fn db_path_str(&self) -> &str {
-                &self.inner.db.path_str
+                &self.inner.db.path_str()
             }
 
             fn db_id(&self) -> &str {
-                &self.inner.db.db_id
+                &self.inner.db.db_id()
             }
 
-            fn name(&self) -> &str {
+            fn name(&self) -> &Arc<String> {
                 &self.inner.name
+            }
+        }
+
+        // Implement `ErrorPostprocessor` by delegating to the database itself
+        impl crate::error::ErrorPostprocessor for $cf_name {
+            fn postprocess_error(&self, err: Error) -> Error {
+                self.inner.db.postprocess_error(err)
             }
         }
     };

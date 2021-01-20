@@ -1032,15 +1032,7 @@ mod test {
         // `get_for_update` call in tx1.  `tx2` will time out waiting to acquire the lock on this
         // key.
         match value2 {
-            Err(error::Error::RocksDBError {
-                status:
-                    status::Status {
-                        code: status::Code::TimedOut,
-                        subcode: status::SubCode::LockTimeout,
-                        ..
-                    },
-                ..
-            }) => {
+            Err(error::Error::RocksDBLockTimeout { .. }) => {
                 // Expected result
                 Ok(())
             }
@@ -1082,15 +1074,7 @@ mod test {
         // `get_for_update` call in tx1.  `tx2` will time out waiting to acquire the lock on this
         // key.
         match value2 {
-            Err(error::Error::RocksDBError {
-                status:
-                    status::Status {
-                        code: status::Code::TimedOut,
-                        subcode: status::SubCode::LockTimeout,
-                        ..
-                    },
-                ..
-            }) => {
+            Err(error::Error::RocksDBLockTimeout { .. }) => {
                 // Expected result
                 Ok(())
             }
@@ -1135,15 +1119,7 @@ mod test {
         let result = tx2.commit();
 
         match result {
-            Err(error::Error::RocksDBError {
-                status:
-                    status::Status {
-                        code: status::Code::Busy,
-                        subcode: status::SubCode::None,
-                        ..
-                    },
-                ..
-            }) => {
+            Err(error::Error::RocksDBConflict { .. }) => {
                 // Expected result
                 Ok(())
             }

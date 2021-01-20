@@ -10,6 +10,8 @@
 // it seems to be of minimal value anyway
 #![allow(clippy::needless_lifetimes)]
 
+use std::sync::Arc;
+
 use crate::db::ColumnFamilyLike;
 use crate::db::DBLike;
 use cheburashka::labels::LabelSet;
@@ -119,16 +121,18 @@ impl<'a> DatabaseOperationLabels<'a> {
 #[span(target = "rocksdb", name = "column_family")]
 #[label_set(
     tag_expression(db_path = "self.db_labels.path"),
-    tag_expression(db_id = "self.db_labels.db_id")
+    tag_expression(db_id = "self.db_labels.db_id"),
+    tag_expression(cf_name = "self.cf_name.as_ref()")
 )]
+#[allow(clippy::rc_buffer)] // Using Arc<String> in an immutable way to save heap allocs, it's a legitimate strategy
 pub struct ColumnFamilyLabels<'a> {
     /// This field isn't used as a label directly; rather its own labels are exposed via label
     /// expressions
     #[label(ignore)]
     pub db_labels: DatabaseLabels<'a>,
 
-    #[label(tag)]
-    pub cf_name: &'a str,
+    #[label(ignore)]
+    pub cf_name: &'a Arc<String>,
 }
 
 impl<'a, CF: ColumnFamilyLike> From<&'a CF> for ColumnFamilyLabels<'a> {

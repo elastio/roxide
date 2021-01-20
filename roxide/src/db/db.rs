@@ -43,7 +43,11 @@ impl DB {
     }
 }
 
+// There are no errors that need to be post-processed for this DB type
+impl crate::error::ErrorPostprocessor for DB {}
+
 #[cfg(test)]
+
 mod test {
     use super::*;
     use crate::ops::{Compact, DBOpen};
@@ -82,10 +86,10 @@ mod test {
         let db = DB::open(&path, options)?;
 
         let boo = db.get_cf("boo").unwrap();
-        assert_eq!("boo", boo.name());
+        assert_eq!("boo", boo.name().as_str());
 
         let bar = db.get_cf("bar").unwrap();
-        assert_eq!("bar", bar.name());
+        assert_eq!("bar", bar.name().as_str());
 
         Ok(())
     }

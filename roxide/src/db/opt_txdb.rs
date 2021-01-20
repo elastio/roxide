@@ -120,3 +120,19 @@ impl OptimisticTransactionDB {
         result
     }
 }
+
+impl crate::error::ErrorPostprocessor for OptimisticTransactionDB {
+    fn postprocess_error(&self, err: Error) -> Error {
+        match err {
+            Error::RocksDBError { status, backtrace }
+                if status.code == crate::status::Code::Busy
+                    && status.subcode == crate::status::SubCode::None =>
+            {
+                // This is how commit operations fail when optimistic locking is enabled.  This
+                // error would be expected to happen at commit time.
+                Error::RocksDBConflict { backtrace }
+            }
+            other => other,
+        }
+    }
+}

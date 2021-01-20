@@ -23,7 +23,7 @@ pub type Result<T, E = Error> = StdResult<T, E>;
 /// instead use this type which returns a boxed `Error` impl.
 pub type AnyError = Box<dyn std::error::Error + Sync + Send>;
 
-const ERROR_COUNT_METRIC_NAME: &str = "roxidedb_error_count";
+const ERROR_COUNT_METRIC_NAME: &str = "rocksdb_error_count";
 
 lazy_static! {
     /// Maintain a simple counter of the number of times an error is reported, with a label equal
@@ -51,6 +51,36 @@ pub enum Error {
         status: status::Status,
         backtrace: Backtrace,
     },
+
+    /// A RocksDB lock timeout error was reported.
+    ///
+    /// When a RocksDB error status `TimedOut`, with a subcode of `LockTimeout`, is reported, it's
+    /// translated by roxide into this specific error variant.  This is a convenience because
+    /// handling that specific type of rocks error is common therefore having a dedicated error
+    /// variant for it makes calling code easier.
+    #[snafu(display("rocksdb lock timed out"))]
+    RocksDBLockTimeout { backtrace: Backtrace },
+
+    /// A deadlock was detected in a TransactionDB.
+    ///
+    /// This includes additional debugging information to help identify the deadlock.
+    #[snafu(display(
+        "rocksdb transaction deadlocked.  Recent deadlocks for debugging purposes: \n{:#?}",
+        deadlock_paths
+    ))]
+    RocksDBDeadlock {
+        backtrace: Backtrace,
+        deadlock_paths: Vec<crate::DeadlockPath>,
+    },
+
+    /// A conflict between two competiting transactions was detected in an
+    /// `OptimisticTransactionDB`.
+    ///
+    /// This error is specific to optimistic locking.  On a `TransactionDB` the same scenario would
+    /// fail with either `RocksDBLockTimeout` or `RocksDBDeadlock` depending on whether or not
+    /// deadlock detection is enabled.
+    #[snafu(display("rocksdb detected a conflict between two optimistic locking transactions"))]
+    RocksDBConflict { backtrace: Backtrace },
 
     /// An error returned by the `rust-rocksdb` wrapper.
     ///
@@ -145,5 +175,62 @@ impl Error {
         counter.inc();
 
         error
+    }
+}
+
+impl TransactionRetryError for Error {
+    fn retry_transaction(&self) -> bool {
+        matches!(self, Self::RocksDBDeadlock { .. }
+            | Self::RocksDBLockTimeout { .. }
+            | Self::RocksDBConflict { .. })
+    }
+}
+
+/// Post-process an error reported by a RocksDB component (a database or a transaction)
+///
+/// In practice this translates deadlock errors into a specific deadlock error that includes a
+/// list of recent deadlock paths to aid in debugging.  In the future it might be used for other
+/// purposes as well.
+pub trait ErrorPostprocessor: Send + 'static {
+    fn postprocess_error(&self, err: Error) -> Error {
+        // Default behavior is to do nothing; specific implementations may override
+        err
+    }
+}
+
+/// Trait implemented by error types that may contain a RocksDB error which signals a transaction
+/// needs to be retried due to a deadlock, lock timeout, or lock conflict.
+///
+/// This is used with [`crate::BeginTrans::with_trans_retryable`] and related methods to allow
+/// arbitrary error types to be used while still detecting when a RocksDB error should cause the
+/// transaction to be retried
+pub trait TransactionRetryError {
+    /// Test to see if this error indicates the current transaction should be retried.
+    ///
+    /// If this returns `true`, the entire transaction will be aborted, and the steps to perform
+    /// the transaction will be performed again in a new transaction.  if this returns false, the
+    /// transaction fails and the error is propagated back to the caller.
+    fn retry_transaction(&self) -> bool;
+}
+
+// Due to Rust rules, no other crate can implement `TransactionRetryError` on behalf of third party
+// crates, so we need to implement this for Anyhow so that other code which uses anyhow can operate
+// in retryable transactions.
+//
+// Unfortunately there's a huge down side.  The concrete roxide error type `Error` must be in the
+// error chain; if some other error type implements `TransactionRetryError` but doesn't expose our
+// roxide `Error` type as a source, then this won't work.  Limitations on Rust dynamic casts are to
+// blame.
+#[cfg(feature = "anyhow")]
+impl TransactionRetryError for anyhow::Error {
+    fn retry_transaction(&self) -> bool {
+        // If any error in the chain wrapped by anyhow is our error type, then
+        for err in self.chain() {
+            if let Some(rocks_err) = err.downcast_ref::<Error>() {
+                return rocks_err.retry_transaction();
+            }
+        }
+
+        false
     }
 }
