@@ -325,12 +325,12 @@ impl<CF: ColumnFamilyLike> ColumnFamilyOperationMetricsReporter<CF> {
         batch_size: usize,
         func: F,
     ) -> Result<R> {
-        self.op_item_total.inc_by(batch_size as i64);
+        self.op_item_total.inc_by(batch_size as u64);
 
         let result = func();
 
         if result.is_err() {
-            self.op_item_failed.inc_by(batch_size as i64);
+            self.op_item_failed.inc_by(batch_size as u64);
         }
 
         result

@@ -745,7 +745,7 @@ impl<'a, DBT: DBLike + BeginTrans> RetryableTransaction<'a, DBT> {
                 );
                 self.total_delay += sleep;
                 self.sleeping.inc();
-                tokio::time::delay_for(sleep).await;
+                tokio::time::sleep(sleep).await;
                 self.sleeping.dec();
 
                 Ok(())
@@ -1105,7 +1105,7 @@ mod test {
                 let delay = RETRYABLE_TX_DELAY_METRIC.apply_labels(&labels).unwrap();
 
                 // There should have been one retryable transaction for each test thread
-                assert_eq!(PARALLEL_CONFLICTING_THREADS as i64, total.get());
+                assert_eq!(PARALLEL_CONFLICTING_THREADS as u64, total.get());
 
                 // There should be none still running
                 assert_eq!(0, running.get());
@@ -1124,7 +1124,7 @@ mod test {
                 // Attempts will be equal to the PARALLEL_CONFLICTING_THREADS count, plus however many
                 // retries there were
                 assert_eq!(
-                    PARALLEL_CONFLICTING_THREADS as i64 + retries.get(),
+                    PARALLEL_CONFLICTING_THREADS as u64 + retries.get(),
                     attempts.get()
                 );
 
@@ -1227,7 +1227,7 @@ mod test {
                     let delay = RETRYABLE_TX_DELAY_METRIC.apply_labels(&labels).unwrap();
 
                     // There should have been one retryable transaction for each test thread
-                    assert_eq!(PARALLEL_CONFLICTING_THREADS as i64, total.get());
+                    assert_eq!(PARALLEL_CONFLICTING_THREADS as u64, total.get());
 
                     // There should be none still running
                     assert_eq!(0, running.get());
@@ -1243,7 +1243,7 @@ mod test {
                     assert_eq!(0, retries.get());
 
                     // Attempts will be equal to the PARALLEL_CONFLICTING_THREADS count
-                    assert_eq!(PARALLEL_CONFLICTING_THREADS as i64, attempts.get());
+                    assert_eq!(PARALLEL_CONFLICTING_THREADS as u64, attempts.get());
 
                     // Because there were no errors, there should have been no delays
                     assert_eq!(0.0, (delay.get_sample_sum()));

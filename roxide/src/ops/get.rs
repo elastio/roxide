@@ -1129,45 +1129,41 @@ mod test {
         }
     }
 
-    #[test]
-    fn db_async_get() -> Result<()> {
+    #[tokio::test]
+    async fn db_async_get() -> Result<()> {
         let path = TempDBPath::new();
         let db = DB::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        let mut rt = elasyncio::init_tokio_runtime()?;
+        let keys: Vec<_> = (0..1000).map(|n| format!("key{}", n)).collect();
+        let num_keys = keys.len();
 
-        rt.block_on(async move {
-            let keys: Vec<_> = (0..1000).map(|n| format!("key{}", n)).collect();
-            let num_keys = keys.len();
+        let results = db.async_get(&cf, keys.clone(), None).await?;
+        assert_eq!(num_keys, results.len());
 
-            let results = db.async_get(&cf, keys.clone(), None).await?;
-            assert_eq!(num_keys, results.len());
+        // None of these keys exist yet, so expect them all to be None
+        for (_key, value) in results.into_iter() {
+            assert_eq!(None, value);
+        }
 
-            // None of these keys exist yet, so expect them all to be None
-            for (_key, value) in results.into_iter() {
-                assert_eq!(None, value);
+        // Now write every even-numbered key to the database
+        let put_pairs: Vec<_> = (0..1000u32)
+            .filter(|n| n % 2 == 0)
+            .map(|n| (format!("key{}", n), format!("value{}", n)))
+            .collect();
+
+        db.async_put(&cf, put_pairs, None).await?;
+
+        let results = db.async_get(&cf, keys.clone(), None).await?;
+        assert_eq!(keys.len(), results.len());
+
+        for (idx, (_key, value)) in results.into_iter().enumerate() {
+            if idx % 2 == 0 {
+                assert_eq!(format!("value{}", idx), value.unwrap().to_string_lossy());
             }
+        }
 
-            // Now write every even-numbered key to the database
-            let put_pairs: Vec<_> = (0..1000u32)
-                .filter(|n| n % 2 == 0)
-                .map(|n| (format!("key{}", n), format!("value{}", n)))
-                .collect();
-
-            db.async_put(&cf, put_pairs, None).await?;
-
-            let results = db.async_get(&cf, keys.clone(), None).await?;
-            assert_eq!(keys.len(), results.len());
-
-            for (idx, (_key, value)) in results.into_iter().enumerate() {
-                if idx % 2 == 0 {
-                    assert_eq!(format!("value{}", idx), value.unwrap().to_string_lossy());
-                }
-            }
-
-            Ok(())
-        })
+        Ok(())
     }
 
     #[tokio::test]

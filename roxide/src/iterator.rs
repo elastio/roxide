@@ -1259,7 +1259,7 @@ mod test {
         let mut rand = rand::thread_rng();
 
         for _ in 0..KEY_COUNT {
-            let key = rand.gen_range(0, (KEY_COUNT * 10) as u64);
+            let key = rand.gen_range(0..(KEY_COUNT * 10) as u64);
             all_keys.push(key);
 
             if key % 2 == 0 {

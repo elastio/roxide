@@ -839,32 +839,26 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn db_async_iterate_all() -> Result<()> {
+    #[tokio::test]
+    async fn db_async_iterate_all() -> Result<()> {
         let path = TempDBPath::new();
         let db = DB::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        let mut rt = elasyncio::init_tokio_runtime()?;
-        rt.block_on(async move {
-            let _iter = db.async_iterate_all(&cf, None).await?;
+        let _iter = db.async_iterate_all(&cf, None).await?;
 
-            Ok(())
-        })
+        Ok(())
     }
 
-    #[test]
-    fn tx_async_iterate_all() -> Result<()> {
+    #[tokio::test]
+    async fn tx_async_iterate_all() -> Result<()> {
         let path = TempDBPath::new();
         let db = TransactionDB::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         let tx = db.begin_trans(None, None)?.into_sync();
 
-        let mut rt = elasyncio::init_tokio_runtime()?;
-        rt.block_on(async move {
-            let _iter = tx.async_iterate_all(&cf, None).await?;
+        let _iter = tx.async_iterate_all(&cf, None).await?;
 
-            Ok(())
-        })
+        Ok(())
     }
 }
