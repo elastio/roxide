@@ -37,7 +37,7 @@ snafu = { version = "0.6", features = ["backtraces", "futures"] }
 strum = "0.20"
 strum_macros = "0.20"
 tempfile = "3"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.1", features = ["full"] }
 tracing = "0.1" # Hopefully can figure out how to avoid needing this
 try-again = { path = "../try-again", features = ["rand"] }
 
