@@ -120,7 +120,7 @@ mod test {
                 let message = std::ffi::CStr::from_ptr(err_msg)
                     .to_string_lossy()
                     .into_owned();
-                panic!(message);
+                panic!("{}", message);
             }
         }
     }
