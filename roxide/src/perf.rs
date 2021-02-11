@@ -253,8 +253,6 @@ mod test {
                         }
                         let stats = context.collect_stats();
 
-                        println!("Stats: {:#?}", stats.stats);
-
                         // There should be some additional non-zero metrics including timing-related metrics
                         assert_gt!(stats.stats["get_read_bytes"], 0);
 

@@ -691,7 +691,7 @@ impl<'a, DBT: DBLike + BeginTrans> RetryableTransaction<'a, DBT> {
     ) -> Result<(), E> {
         if e.retry_transaction() {
             if let Some(sleep) = self.retry_delays.next() {
-                warn!(
+                debug!(
                     err = log_error(&e),
                     self.attempt,
                     ?sleep,
@@ -736,7 +736,7 @@ impl<'a, DBT: DBLike + BeginTrans> RetryableTransaction<'a, DBT> {
     ) -> Result<(), E> {
         if e.retry_transaction() {
             if let Some(sleep) = self.retry_delays.next() {
-                warn!(
+                debug!(
                     err = log_error(&e),
                     self.attempt,
                     ?sleep,
