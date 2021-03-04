@@ -208,10 +208,9 @@ fn build_rocksdb() {
         config.flag("-Wno-unused-parameter");
     }
 
-    //Build a single `.cc` file in the out dir which will `#include` every source file in the
-    //library.  This sucks compared to just calling `config.file` once for each source file so we
-    //can take advantage of the inherenet parallelism of C++ compilation, but that doesn't work.
-    //Why?  It's complicated.
+    //Build C++ wrapper files in the out dir which will `#include` every source file in the
+    //library.  This sucks compared to just calling `config.file` once for each source file, but
+    //that doesn't work. Why?  It's complicated.
     //
     //First: It's important to canonicalize the source file names.  the RocksDB logging system
     //makes an assumption that the `__FILE__` intrinsic for all source *and* header files that
@@ -223,30 +222,48 @@ fn build_rocksdb() {
     //
     //For the same reason, include paths are canonicalized above with `canonically_include`
     //
-    //So why does that require us to make one big compilation unit?  Due to a bug in the `cc`
+    //So why does that require us to do this hack with making dummy files in OUT_DIR?  Due to a bug in the `cc`
     //crate:
-    //`config.file()` needs to determine a suitable name for the `.o` file that gets produced when compiling this file.  How does
-    //it do that?  Well, if `file` is relative then it's easy: it just appends `file` to the
-    //dest dir and adds `.o  But if `file` is absolute, then it appends only the file NAME to
-    //the dest dir.  That would be find except the RocksDB code has multiple files with the
-    //name `format.cc` in different directories, and this means they clobber eachother on
-    //output leading to linker errors that are hard to debug.
+    //`config.file()` needs to determine a suitable name for the `.o` file that gets produced when
+    //compiling this file.  How does it do that?  Well, if `file` is relative then it's easy: it
+    //just appends `file` to the dest dir and adds `.o  But if `file` is absolute, then it appends
+    //only the file NAME to the dest dir.  That would be find except the RocksDB code has multiple
+    //files with the name `format.cc` in different directories, and this means they clobber
+    //eachother on output leading to linker errors that are hard to debug.
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let unity_path = out_path.join("unity.cc").to_string_lossy().into_owned();
-    let mut unity_file = fs::File::create(&unity_path).unwrap();
     for file in lib_sources {
         if !file.is_empty() {
             let file = "rocksdb/".to_string() + file;
 
-            let file = dunce::canonicalize(&file)
-                .expect(&format!("Failed to canonicalize source file path {}", file));
-            writeln!(unity_file, "#include \"{}\"", file.to_string_lossy()).unwrap();
+            // Make a file with path `file` relative to `OUT_DIR`, that does nothing but #include
+            // the fully-qualified path of the actual source file in the RocksDB library soruces
+            let dummy_file_path = out_path.join(&file);
+            if let Some(parent) = dummy_file_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .expect("Failed to create dummy file output directory");
+            }
+
+            // Don't re-create this file if it already exists; that will just make the compiler
+            // think it needs to be rebuilt
+            if !dummy_file_path.exists() {
+                let mut dummy_file = fs::File::create(&dummy_file_path).unwrap();
+
+                let actual_file_path = dunce::canonicalize(&file)
+                    .expect(&format!("Failed to canonicalize source file path {}", file));
+
+                writeln!(
+                    dummy_file,
+                    "#include \"{}\"",
+                    actual_file_path.to_string_lossy()
+                )
+                .unwrap();
+            }
+
+            // Include the dummy file in the list of source files to compile.
+            config.file(&dummy_file_path);
         }
     }
-    // On windows this file can't be opened by the compiler if we're still using it
-    drop(unity_file);
 
-    config.file(&unity_path);
     config.file("build_version.cc");
 
     config.cpp(true);
