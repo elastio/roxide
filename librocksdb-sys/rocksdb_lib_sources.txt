@@ -84,6 +84,7 @@ env/env_posix.cc
 env/file_system.cc
 env/file_system_tracer.cc
 env/fs_posix.cc
+env/file_system_tracer.cc
 env/io_posix.cc
 env/mock_env.cc
 file/delete_scheduler.cc
@@ -131,6 +132,12 @@ options/options.cc
 options/options_helper.cc
 options/options_parser.cc
 port/port_posix.cc
+port/win/env_default.cc
+port/win/env_win.cc
+port/win/io_win.cc
+port/win/port_win.cc
+port/win/win_logger.cc
+port/win/win_thread.cc
 port/stack_trace.cc
 table/adaptive/adaptive_table_factory.cc
 table/block_based/binary_search_index_reader.cc
