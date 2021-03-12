@@ -1469,6 +1469,11 @@ mod tests {
         assert!(cfs.iter().any(|cf| cf.name == DEFAULT_CF_NAME));
         assert_eq!(3, cfs.len());
 
+        // Sadly as of the upgrade to Rocks 6.15.4 the C++ API no longer provides a way to get the
+        // block size option.
+
+        /*
+
         for cf in cfs.into_iter() {
             let name = cf.name.as_ref();
             let options = &cf.options;
@@ -1531,6 +1536,7 @@ mod tests {
                 })
             }
         }
+        */
 
         Ok(())
     }

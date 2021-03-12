@@ -570,8 +570,18 @@ impl Delete for WriteBatch {
     }
 }
 
-// Implement DeleteRange for all of the database types
-impl<T: GetDBPtr> DeleteRange for T {
+/// Implement DeleteRange for DB
+///
+/// Per the RocksDB HISTORY.MD:
+///
+/// Since 6.15.0, TransactionDB returns error Statuses from calls to DeleteRange() and calls to
+/// Write() where the WriteBatch contains a range deletion. Previously such operations may have
+/// succeeded while not providing the expected transactional guarantees. There are certain cases
+/// where range deletion can still be used on such DBs; see the API doc on
+/// TransactionDB::DeleteRange() for details.
+///
+/// Note that I can't find that API doc so DeleteRange is basicallynot possible
+impl DeleteRange for DB {
     unsafe fn raw_delete_range(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -594,53 +604,36 @@ impl<T: GetDBPtr> DeleteRange for T {
     }
 }
 
-impl DeleteRange for WriteBatch {
+/// The comment above on `DB` is correct, however when using OptimisticTransactionDB there is an
+/// escape hatch, one can use the underlying database without transaction semantics.  Since there
+/// are times when one can accept that the range delete is not transactional but nonetheless wants
+/// a range delete and not a bunch of single record delete tombstones, this is still useful.
+impl DeleteRange for OptimisticTransactionDB {
     unsafe fn raw_delete_range(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         start: &[u8],
         end: &[u8],
-        _options: NonNull<ffi::rocksdb_writeoptions_t>,
+        options: NonNull<ffi::rocksdb_writeoptions_t>,
     ) -> Result<()> {
-        ffi::rocksdb_writebatch_delete_range_cf(
-            handle.rocks_ptr().as_ptr(),
-            cf.as_ptr(),
-            start.as_ptr() as *const libc::c_char,
-            start.len() as libc::size_t,
-            end.as_ptr() as *const libc::c_char,
-            end.len() as libc::size_t,
-        );
+        Self::with_base_db(handle, |base_db| {
+            let db_ptr = cpp!([base_db as "::rocksdb_t*"] -> *mut libc::c_void as "rocksdb::DB*" {
+                return cast_to_db(base_db);
+            });
 
-        Ok(())
-    }
-
-    fn delete_range<
-        CF: db::ColumnFamilyLike,
-        K: BinaryStr,
-        KR: Into<KeyRange<K>>,
-        O: Into<Option<WriteOptions>>,
-    >(
-        &self,
-        cf: &CF,
-        key_range: KR,
-        options: O,
-    ) -> Result<()> {
-        let key_range = key_range.into();
-        if options.into().is_some() {
-            return Err(Error::other_error(
-                "Write options for `DeleteRange` operations on a `WriteBatch` are not supported",
-            ));
-        }
-
-        unsafe {
-            Self::raw_delete_range(
-                self.handle(),
-                cf.rocks_ptr(),
-                key_range.start().as_slice(),
-                key_range.end().as_slice(),
-                WriteOptions::from_option(None).rocks_ptr(),
+            delete_range_db(
+                db_ptr,
+                options.as_ptr(),
+                cf.as_ptr(),
+                start.as_ptr() as *const libc::c_char,
+                start.len() as libc::size_t,
+                end.as_ptr() as *const libc::c_char,
+                end.len() as libc::size_t,
             )
-        }
+            .into_result()?;
+
+            Ok(())
+        })
     }
 }
 
@@ -667,7 +660,7 @@ mod test {
         Ok(())
     }
 
-    fn delete_range_test_impl<DBT: DBLike, CFT: ColumnFamilyLike>(
+    fn delete_range_test_impl<DBT: DBLike + DeleteRange, CFT: ColumnFamilyLike>(
         db: &DBT,
         cf: &CFT,
     ) -> Result<()> {
@@ -759,7 +752,7 @@ mod test {
         Ok(())
     }
 
-    fn multi_delete_range_test_impl<DBT: DBLike, CFT: ColumnFamilyLike>(
+    fn multi_delete_range_test_impl<DBT: DBLike + DeleteRange, CFT: ColumnFamilyLike>(
         db: &DBT,
         cf: &CFT,
     ) -> Result<()> {
@@ -842,42 +835,6 @@ mod test {
     }
 
     #[test]
-    fn txdb_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        delete_range_test_impl(&db, &cf)
-    }
-
-    #[test]
-    fn txdb_multi_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        multi_delete_range_test_impl(&db, &cf)
-    }
-
-    #[test]
-    fn opt_txdb_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        delete_range_test_impl(&db, &cf)
-    }
-
-    #[test]
-    fn opt_txdb_multi_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        multi_delete_range_test_impl(&db, &cf)
-    }
-
-    #[test]
     fn tx_multi_delete() -> Result<()> {
         let path = TempDBPath::new();
         let db = TransactionDB::open(&path, None)?;
@@ -939,93 +896,6 @@ mod test {
 
         for key in &keys {
             assert_eq!(None, db.get(&cf, &key, None)?);
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn write_batch_delete_range() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        let mut keys = random_keys(1000);
-
-        for key in &keys {
-            db.put(&cf, &key, b"foo", None)?;
-        }
-
-        keys.sort();
-
-        // Split the keys into two halves, and use those halves to produce the delete ranges
-        let upper_half = keys.split_off(keys.len() / 2);
-        let lower_half = keys;
-
-        // Make a range that starts at the first key in the lower half (inclusive), and ends at the
-        // first key in the upper half (exclusive).  That is, the range covers all keys in
-        // `lower_half` and none in `upper_half`.
-        let lower_range: KeyRange<Vec<u8>> = KeyRange::new(
-            lower_half.first().unwrap().clone(),
-            upper_half.first().unwrap().clone(),
-        );
-
-        // Make another range that covers the upper half.  For this one, for variety if nothing
-        // else, use the `from_inclusive` helper to let us specify an inclusive upper bound that
-        // gets converted into an exclusive one internally.
-        let upper_range: KeyRange<Vec<u8>> = KeyRange::from_inclusive(
-            upper_half.first().unwrap().clone(),
-            upper_half.last().unwrap().clone(),
-        );
-
-        let batch = WriteBatch::new()?;
-        batch.delete_range(&cf, lower_range, None)?;
-        db.write(batch, None)?;
-
-        // All lower half keys are gone; upper half keys are not
-        for (idx, key) in lower_half.iter().enumerate() {
-            assert_eq!(
-                None,
-                db.get(&cf, &key, None)?,
-                "lower_half[{}] = {}",
-                idx,
-                hex::encode(key.as_slice())
-            );
-        }
-
-        for (idx, key) in upper_half.iter().enumerate() {
-            assert_ne!(
-                None,
-                db.get(&cf, &key, None)?,
-                "upper_half[{}] = {}",
-                idx,
-                hex::encode(key.as_slice())
-            );
-        }
-
-        let batch = WriteBatch::new()?;
-        batch.delete_range(&cf, upper_range, None)?;
-        db.write(batch, None)?;
-
-        // Now ALL keys are gone
-        for (idx, key) in lower_half.iter().enumerate() {
-            assert_eq!(
-                None,
-                db.get(&cf, &key, None)?,
-                "lower_half[{}] = {}",
-                idx,
-                hex::encode(key.as_slice())
-            );
-        }
-
-        for (idx, key) in upper_half.iter().enumerate() {
-            assert_eq!(
-                None,
-                db.get(&cf, &key, None)?,
-                "upper_half[{}] = {}",
-                idx,
-                hex::encode(key.as_slice())
-            );
         }
 
         Ok(())

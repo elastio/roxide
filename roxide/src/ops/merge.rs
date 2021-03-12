@@ -401,6 +401,8 @@ mod test {
         existing_val: Option<&[u8]>,
         operands: &mut MergeOperands,
     ) -> Option<Vec<u8>> {
+        // eprintln!("test_merge: existing_val={:#?} operands={:#?}", existing_val, operands.size_hint());
+
         let mut max = existing_val.map(u64_from_le_bytes);
 
         for op in operands {
@@ -444,6 +446,53 @@ mod test {
             // There should be no keys
             assert_eq!(None, db.get(&max_cf, "max", None)?);
             assert_eq!(None, db.get(&max_cf, "simple", None)?);
+        }
+
+        Ok(())
+    }
+
+    /// After the merge operations before the get operations close and re-open the DB which
+    /// exercises a compaction pathway
+    #[quickcheck]
+    fn merge_values_during_reopen(values: Vec<u64>) -> Result<()> {
+        let path = TempDBPath::new();
+        {
+            let mut options = DBOptions::default();
+            options.add_column_family("max");
+            options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
+            let db = DB::open(&path, options)?;
+
+            let default_cf = db.get_cf("default").unwrap();
+            let max_cf = db.get_cf("max").unwrap();
+
+            // For every generated input, write to two keys, max and simple.  Simple is written with
+            // `Put` so the last write wins.  Max has a merge operator that takes the max value only.
+            for value in values.iter() {
+                let value_bytes = u64_to_le_bytes(*value);
+                db.merge(&max_cf, "max", &value_bytes, None)?;
+                db.put(&default_cf, "simple", &value_bytes, None)?;
+            }
+        }
+
+        let mut options = DBOptions::default();
+        options.add_column_family("max");
+        options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
+        let db = DB::open(&path, options)?;
+        let default_cf = db.get_cf("default").unwrap();
+        let max_cf = db.get_cf("max").unwrap();
+
+        // Read back the keys.
+        if !values.is_empty() {
+            let max_value = u64_from_le_bytes(db.get(&max_cf, "max", None)?.unwrap().as_ref());
+            let simple_value =
+                u64_from_le_bytes(db.get(&default_cf, "simple", None)?.unwrap().as_ref());
+
+            assert_eq!(*values.iter().max().unwrap(), max_value);
+            assert_eq!(*values.as_slice().last().unwrap(), simple_value);
+        } else {
+            // There should be no keys
+            assert_eq!(None, db.get(&max_cf, "max", None)?);
+            assert_eq!(None, db.get(&default_cf, "simple", None)?);
         }
 
         Ok(())

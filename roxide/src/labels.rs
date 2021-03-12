@@ -157,8 +157,8 @@ impl<'a, CF: ColumnFamilyLike> From<&'a CF> for ColumnFamilyLabels<'a> {
 #[span(target = "rocksdb", name = "column_family_op")]
 #[label_set(
     tag_expression(db_path = "self.cf_labels.db_labels.path"),
-    tag_expression(db_id = "self.cf_labels.db_labels.db_id")
-    tag_expression(cf_name = "self.cf_labels.cf_name")
+    tag_expression(db_id = "self.cf_labels.db_labels.db_id"),
+    tag_expression(cf_name = "self.cf_labels.cf_name.as_ref()")
 )]
 pub struct ColumnFamilyOperationLabels<'a> {
     /// This field isn't used as a label directly; rather its own labels are exposed via label
