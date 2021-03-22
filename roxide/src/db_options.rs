@@ -745,6 +745,7 @@ impl Default for DBOptions {
             "bytes_per_sync" => "8M",
             "create_if_missing" => "true",
             "create_missing_column_families" => "true",
+            "write_dbid_to_manifest" => "true",
 
             // https://github.com/facebook/rocksdb/wiki/Atomic-flush
             //

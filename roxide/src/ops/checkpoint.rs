@@ -124,4 +124,24 @@ mod test {
 
         Ok(())
     }
+
+    /// An unexpected result that this test confirms is that checkpoints of a database get a new
+    /// ID.
+    /// WTF??
+    #[test]
+    fn checkpoint_id_changes() -> Result<()> {
+        let path = TempDBPath::new();
+        let db = DB::open(&path, None)?;
+        let id = db.get_db_id().unwrap();
+        let cf = db.get_cf("default").unwrap();
+
+        db.put(&cf, "foo", "bar", None)?;
+
+        let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+
+        let checkpoint_db = DB::open(checkpoint.path(), None)?;
+        assert_ne!(id, checkpoint_db.get_db_id().unwrap());
+
+        Ok(())
+    }
 }

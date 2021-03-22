@@ -42,6 +42,14 @@ pub trait GetDBId: RocksOpBase {
         }
     }
 
+    /// Get the unique ID of this database.
+    ///
+    /// The ID is a string representation of a GUID.
+    ///
+    /// NOTE: This ID is immutable for the life of the database, *however*, when a checkpoint of
+    /// the database is taken, the result is, semantically, a new database with a new ID.  Thus,
+    /// this is not suitable as a way to obtain a stable ID for a database if it's possible that
+    /// database will be restored from a checkpoint.
     fn get_db_id(&self) -> Option<String>;
 }
 
