@@ -232,12 +232,12 @@ fn get_histograms(map: &mut Vec<HistogramData>, stats_ptr: *mut libc::c_void) {
 /// Statistics exposed at the database level when `DBOptions::set_stats_level` was called with a
 /// level higher than `Disabled`.
 #[derive(PartialEq, Clone, Debug)]
-pub struct DBStatistics {
+pub struct DbStatistics {
     pub counters: Vec<TickerData>,
     pub histograms: Vec<HistogramData>,
 }
 
-impl DBStatistics {
+impl DbStatistics {
     /// Creates a statistics object populated with information in the `rocksdb::Statistics` struct
     /// at the given pointer address.
     pub(crate) unsafe fn from_rocks_stats_ptr(stats_ptr: *mut libc::c_void) -> Self {
@@ -249,14 +249,14 @@ impl DBStatistics {
         get_histograms(&mut histograms, stats_ptr);
         histograms.sort_by_key(|counter| counter.name);
 
-        DBStatistics {
+        DbStatistics {
             counters,
             histograms,
         }
     }
 }
 
-impl fmt::Display for DBStatistics {
+impl fmt::Display for DbStatistics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Counters:")?;
 

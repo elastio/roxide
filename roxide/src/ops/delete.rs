@@ -381,7 +381,7 @@ pub trait DeleteRange: RocksOpBase {
     }
 }
 
-impl Delete for DB {
+impl Delete for Db {
     unsafe fn raw_delete(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -398,7 +398,7 @@ impl Delete for DB {
     }
 }
 
-impl Delete for TransactionDB {
+impl Delete for TransactionDb {
     unsafe fn raw_delete(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -415,7 +415,7 @@ impl Delete for TransactionDB {
     }
 }
 
-impl Delete for OptimisticTransactionDB {
+impl Delete for OptimisticTransactionDb {
     unsafe fn raw_delete(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -570,18 +570,18 @@ impl Delete for WriteBatch {
     }
 }
 
-/// Implement DeleteRange for DB
+/// Implement DeleteRange for Db
 ///
 /// Per the RocksDB HISTORY.MD:
 ///
-/// Since 6.15.0, TransactionDB returns error Statuses from calls to DeleteRange() and calls to
+/// Since 6.15.0, TransactionDb returns error Statuses from calls to DeleteRange() and calls to
 /// Write() where the WriteBatch contains a range deletion. Previously such operations may have
 /// succeeded while not providing the expected transactional guarantees. There are certain cases
 /// where range deletion can still be used on such DBs; see the API doc on
 /// TransactionDB::DeleteRange() for details.
 ///
 /// Note that I can't find that API doc so DeleteRange is basicallynot possible
-impl DeleteRange for DB {
+impl DeleteRange for Db {
     unsafe fn raw_delete_range(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -604,11 +604,11 @@ impl DeleteRange for DB {
     }
 }
 
-/// The comment above on `DB` is correct, however when using OptimisticTransactionDB there is an
+/// The comment above on `DB` is correct, however when using OptimisticTransactionDb there is an
 /// escape hatch, one can use the underlying database without transaction semantics.  Since there
 /// are times when one can accept that the range delete is not transactional but nonetheless wants
 /// a range delete and not a bunch of single record delete tombstones, this is still useful.
-impl DeleteRange for OptimisticTransactionDB {
+impl DeleteRange for OptimisticTransactionDb {
     unsafe fn raw_delete_range(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -641,12 +641,12 @@ impl DeleteRange for OptimisticTransactionDB {
 mod test {
     use super::*;
     use crate::db::ColumnFamilyLike;
-    use crate::db::DBLike;
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::test::TempDbPath;
     use crate::test::{random_key, random_keys};
     use more_asserts::*;
 
-    fn delete_test_impl<DBT: DBLike + Get + Put + Delete, CFT: ColumnFamilyLike>(
+    fn delete_test_impl<DBT: DbLike + Get + Put + Delete, CFT: ColumnFamilyLike>(
         db: &DBT,
         cf: &CFT,
     ) -> Result<()> {
@@ -660,7 +660,7 @@ mod test {
         Ok(())
     }
 
-    fn delete_range_test_impl<DBT: DBLike + DeleteRange, CFT: ColumnFamilyLike>(
+    fn delete_range_test_impl<DBT: DbLike + DeleteRange, CFT: ColumnFamilyLike>(
         db: &DBT,
         cf: &CFT,
     ) -> Result<()> {
@@ -752,7 +752,7 @@ mod test {
         Ok(())
     }
 
-    fn multi_delete_range_test_impl<DBT: DBLike + DeleteRange, CFT: ColumnFamilyLike>(
+    fn multi_delete_range_test_impl<DBT: DbLike + DeleteRange, CFT: ColumnFamilyLike>(
         db: &DBT,
         cf: &CFT,
     ) -> Result<()> {
@@ -809,8 +809,8 @@ mod test {
 
     #[test]
     fn db_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         delete_test_impl(&db, &cf)
@@ -818,8 +818,8 @@ mod test {
 
     #[test]
     fn db_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         delete_range_test_impl(&db, &cf)
@@ -827,8 +827,8 @@ mod test {
 
     #[test]
     fn db_multi_range_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         multi_delete_range_test_impl(&db, &cf)
@@ -836,8 +836,8 @@ mod test {
 
     #[test]
     fn tx_multi_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         let tx = db.begin_trans(None, None)?;
 
@@ -858,8 +858,8 @@ mod test {
 
     #[test]
     fn sync_tx_multi_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         let tx = db.begin_trans(None, None)?.into_sync();
 
@@ -880,8 +880,8 @@ mod test {
 
     #[test]
     fn write_batch_multi_delete() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let keys = random_keys(1000);

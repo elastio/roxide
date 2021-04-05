@@ -7,10 +7,10 @@
 //! It allows the ops code to remain generic, without tight coupling to the metrics logic for each
 //! different type of object (db, CF, etc).
 use crate::db::ColumnFamilyLike;
-use crate::db::DBLike;
+use crate::db::DbLike;
 use crate::labels;
 
-pub(crate) trait GetDBLabels {
+pub(crate) trait GetDbLabels {
     fn get_db_labels(&self) -> labels::DatabaseLabels;
     fn get_db_op_labels(&self, op_name: &'static str) -> labels::DatabaseOperationLabels;
 }
@@ -20,7 +20,7 @@ pub(crate) trait GetColumnFamilyLabels {
     fn get_cf_op_labels(&self, op_name: &'static str) -> labels::ColumnFamilyOperationLabels;
 }
 
-impl<T: DBLike> GetDBLabels for T {
+impl<T: DbLike> GetDbLabels for T {
     fn get_db_labels(&self) -> labels::DatabaseLabels {
         // DatabaseLabels has a `From` impl for `DBLike`
         self.into()
@@ -31,7 +31,7 @@ impl<T: DBLike> GetDBLabels for T {
     }
 }
 
-impl GetDBLabels for crate::tx::unsync::Transaction {
+impl GetDbLabels for crate::tx::unsync::Transaction {
     fn get_db_labels(&self) -> labels::DatabaseLabels {
         labels::get_db_metric_labels_for_tx(self)
     }

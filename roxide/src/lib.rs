@@ -47,7 +47,7 @@ pub use error::{Error, Result, TransactionRetryError};
 pub use events::*;
 pub use handle::RocksObject;
 pub use iterator::*;
-pub use mem::DBVector;
+pub use mem::DbVector;
 pub use merge::{MergeFn, MergeOperands, MergeOperatorCallback};
 pub use ops::*;
 pub use perf::*;
@@ -69,20 +69,20 @@ cpp! {{
 extern crate quickcheck_macros;
 
 /// Ensures that DB::Destroy is called for this database when TempDBPath is dropped.
-pub struct TempDBPath {
+pub struct TempDbPath {
     temp_dir: TempDir,
 }
 
-impl TempDBPath {
+impl TempDbPath {
     /// Creates a new temporary database path in the temp directory, and guarantees that this
     /// database will be deleted when this struct goes out of scope
-    pub fn new() -> TempDBPath {
+    pub fn new() -> TempDbPath {
         // In this case, having a `default` value would be misleading because we want each temp
         // path to be unique
         #![allow(clippy::new_without_default)]
         let temp_dir = tempfile::tempdir().unwrap();
 
-        TempDBPath { temp_dir }
+        TempDbPath { temp_dir }
     }
 
     pub fn path(&self) -> &Path {
@@ -90,12 +90,12 @@ impl TempDBPath {
     }
 }
 
-impl Drop for TempDBPath {
+impl Drop for TempDbPath {
     fn drop(&mut self) {
         trace!(temp_dir = %self.temp_dir.path().display(),
             "Destroying database in temp directory");
         // It's important not to panic inside `drop`
-        let _dontcare = crate::db::DB::destroy(None, &self.temp_dir.path());
+        let _dontcare = crate::db::Db::destroy(None, &self.temp_dir.path());
 
         // Some test cases cause other files to be created in a DB dir, not just the database
         // files themselves.  So in addition to the above, explicitly delete the entire
@@ -110,7 +110,7 @@ impl Drop for TempDBPath {
 // supported for references, because when the owned object goes out of scope the database is
 // destroyed.  We dont' want tests passing this TempDBPath by value to `DB::open`, which will cause
 // very strange behavior.
-impl AsRef<Path> for &TempDBPath {
+impl AsRef<Path> for &TempDbPath {
     fn as_ref(&self) -> &Path {
         self.path()
     }
@@ -126,7 +126,7 @@ mod test {
     /// `TempDBPath` is only public and outside of `test` because right now doc tests are not
     /// compiled with `cfg(test)`, so I can't write doctests using `TempDBPath` unless it's not
     /// conditional on the `test` config.  I hope that gets addressed in a future release of Rust.
-    pub use super::TempDBPath;
+    pub use super::TempDbPath;
 
     pub fn random_key() -> Vec<u8> {
         random_data(16)
@@ -210,6 +210,6 @@ mod test {
 
     #[test]
     fn db_path_nothing_there() {
-        let _path = TempDBPath::new();
+        let _path = TempDbPath::new();
     }
 }

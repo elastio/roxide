@@ -1,5 +1,5 @@
-//! Transactions in RocksDB can be either optimistic (using `OptimisticTransactionDB`) or
-//! pessimistic with locks (using `TransactionDB`).  The API is the same either way.
+//! Transactions in RocksDB can be either optimistic (using `OptimisticTransactionDb`) or
+//! pessimistic with locks (using `TransactionDb`).  The API is the same either way.
 //!
 //! There are two `Transaction` implementations:
 //!
@@ -78,7 +78,7 @@ extern "C" {
 /// threads
 pub mod unsync {
     use super::*;
-    use crate::db::DBLike;
+    use crate::db::DbLike;
 
     /// Provides an isolated context for database operations with transaction semantics.
     ///
@@ -114,7 +114,7 @@ pub mod unsync {
     }
 
     impl Transaction {
-        pub(crate) fn new(db: &impl DBLike, tx: impl Into<TransactionHandle>) -> Self {
+        pub(crate) fn new(db: &impl DbLike, tx: impl Into<TransactionHandle>) -> Self {
             let db_handle = db.db_handle();
 
             let tx = Transaction {

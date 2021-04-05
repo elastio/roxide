@@ -21,7 +21,6 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::ffi::c_void;
 use std::fmt::{self, Display};
-use std::iter::FromIterator;
 use std::ptr;
 use std::{
     borrow::Borrow,
@@ -39,7 +38,7 @@ pub use rocksdb::{
 
 pub mod prelude {
     // Most code will want all of our extension traits on the RocksDB options types
-    pub use super::{BlockBasedOptionsExt, ColumnFamilyDescriptor, DBOptions, OptionsExt};
+    pub use super::{BlockBasedOptionsExt, ColumnFamilyDescriptor, DbOptions, OptionsExt};
 
     // And also needs the RocksDB option types themselves, which we re-export to make them look
     // like our own
@@ -130,7 +129,7 @@ impl ColumnFamilyDescriptor {
 /// This struct is used to build `rocksdb::Options` (which wraps the C++ `Options` struct) and
 /// `rocksdb::ColumnFamilyDescriptor` (which wraps the `Options` and name for each column family).
 #[derive(Serialize, Deserialize)]
-pub struct DBOptions {
+pub struct DbOptions {
     /// Database-wide options
     db_options: HashMap<String, String>,
 
@@ -178,7 +177,7 @@ pub struct DBOptions {
     log_level: log::LevelFilter,
 }
 
-impl DBOptions {
+impl DbOptions {
     pub fn new<K, V, DBO, DCFO, CF>(
         db_options: DBO,
         default_cf_options: DCFO,
@@ -191,19 +190,18 @@ impl DBOptions {
         DCFO: Borrow<HashMap<K, V>>,
         CF: Borrow<HashMap<K, HashMap<K, V>>>,
     {
-        DBOptions {
+        DbOptions {
             db_options: Self::make_owned_hash_map(db_options),
 
             db_path: None,
 
             default_cf_options: Self::make_owned_hash_map(default_cf_options),
 
-            column_families: HashMap::from_iter(
-                column_families
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), Self::make_owned_hash_map(v))),
-            ),
+            column_families: column_families
+                .borrow()
+                .iter()
+                .map(|(k, v)| (k.to_string(), Self::make_owned_hash_map(v)))
+                .collect(),
 
             column_family_paths: HashMap::new(),
 
@@ -285,12 +283,12 @@ impl DBOptions {
     }
 
     /// Gets the current default block-based table factory options
-    pub fn get_default_cf_block_table_options(&self) -> Result<HashMap<String, String>> {
+    pub fn get_default_cf_block_table_options(&self) -> HashMap<String, String> {
         if let Some(opts_str) = self.default_cf_options.get("block_based_table_factory") {
             Self::parse_options_string(opts_str)
         } else {
             // No such options
-            Ok(HashMap::new())
+            HashMap::new()
         }
     }
 
@@ -312,7 +310,7 @@ impl DBOptions {
     ///
     /// Applies only if the default block-based table factory is used.
     pub fn set_default_cf_block_bloom_filter_bits(&mut self, bits_per_key: usize) -> Result<()> {
-        let mut options = self.get_default_cf_block_table_options()?;
+        let mut options = self.get_default_cf_block_table_options();
         options.insert(
             "filter_policy".to_string(),
             format!("bloomfilter:{}:false", bits_per_key),
@@ -378,10 +376,10 @@ impl DBOptions {
         let cf_name = cf_name.to_string();
         if let Some(cf_opts) = self.column_families.get(&cf_name) {
             if let Some(opts_str) = cf_opts.get("block_based_table_factory") {
-                Self::parse_options_string(opts_str)
+                Ok(Self::parse_options_string(opts_str))
             } else {
                 // No such options
-                self.get_default_cf_block_table_options()
+                Ok(self.get_default_cf_block_table_options())
             }
         } else {
             Err(Error::other_error(format!(
@@ -517,7 +515,7 @@ impl DBOptions {
         let opts = Options::default();
 
         // Apply the DB and defualt CF options directly to this `Options` struct
-        let default_block_options = self.get_default_cf_block_table_options()?;
+        let default_block_options = self.get_default_cf_block_table_options();
         let mut opts = opts.set_db_options_from_map(&self.db_options)?;
         if let Some(db_path) = self.db_path.as_ref() {
             opts.set_db_path(db_path)?;
@@ -587,7 +585,7 @@ impl DBOptions {
                 // options we'll actually parse out of both the default and the CF-specific options
                 // hashes and use the combination of both.
                 if let Some(cf_block_options) = options.get("block_based_table_factory") {
-                    let mut cf_block_options = Self::parse_options_string(cf_block_options)?;
+                    let mut cf_block_options = Self::parse_options_string(cf_block_options);
                     for (key, value) in default_block_options.iter() {
                         if !cf_block_options.contains_key(key) {
                             cf_block_options.insert(key.to_string(), value.to_string());
@@ -633,7 +631,7 @@ impl DBOptions {
 
     /// Given some options in the RocksDB options string format, parses the options into a hash
     /// table.
-    fn parse_options_string(opts: impl AsRef<str>) -> Result<HashMap<String, String>> {
+    fn parse_options_string(opts: impl AsRef<str>) -> HashMap<String, String> {
         let pairs = opts.as_ref().split(';');
 
         let pairs = pairs.filter_map(|pair| {
@@ -648,7 +646,7 @@ impl DBOptions {
             }
         });
 
-        Ok(HashMap::from_iter(pairs))
+        pairs.collect()
     }
 
     /// Constructs a RocksDB options string given a map of options
@@ -675,15 +673,14 @@ impl DBOptions {
         V: ToString,
         O: Borrow<HashMap<K, V>>,
     {
-        HashMap::from_iter(
-            map.borrow()
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string())),
-        )
+        map.borrow()
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 }
 
-impl fmt::Debug for DBOptions {
+impl fmt::Debug for DbOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
@@ -716,7 +713,7 @@ impl fmt::Debug for DBOptions {
     }
 }
 
-impl PartialEq for DBOptions {
+impl PartialEq for DbOptions {
     fn eq(&self, other: &Self) -> bool {
         self.db_options == other.db_options
             && self.default_cf_options == other.default_cf_options
@@ -727,7 +724,7 @@ impl PartialEq for DBOptions {
     }
 }
 
-impl Default for DBOptions {
+impl Default for DbOptions {
     fn default() -> Self {
         /***************************************
          * IMPORTANT REMINDER!!!!!
@@ -907,7 +904,7 @@ impl Default for DBOptions {
 
         };
 
-        DBOptions::new(db_opts, default_cf_opts, HashMap::new())
+        DbOptions::new(db_opts, default_cf_opts, HashMap::new())
     }
 }
 
@@ -1173,7 +1170,7 @@ impl OptionsExt for Options {
     }
 
     fn set_db_path<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let rocks_path = DBPath::new(path, 0).with_context(|| crate::error::RustRocksDBError {})?;
+        let rocks_path = DBPath::new(path, 0).with_context(|| crate::error::RustRocksDbError {})?;
         self.set_db_paths(&[rocks_path]);
 
         Ok(())
@@ -1291,7 +1288,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_explicitly_add_default_cf() {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family(DEFAULT_CF_NAME);
         options.into_components().unwrap();
     }
@@ -1320,15 +1317,15 @@ mod tests {
 
     #[test]
     fn db_options_defaults_eq() {
-        let options1 = DBOptions::default();
-        let options2 = DBOptions::default();
+        let options1 = DbOptions::default();
+        let options2 = DbOptions::default();
 
         assert_eq!(options1, options2);
     }
 
     #[test]
     fn db_options_serde_json() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
 
         options.add_column_family("foo");
         options.add_column_family_opts("bar", &hashmap![ "baz" => "boo"]);
@@ -1351,34 +1348,34 @@ mod tests {
 
     #[test]
     fn db_options_stats_level_default() -> Result<()> {
-        let options = DBOptions::default();
+        let options = DbOptions::default();
         test_db_options_stats_level(options, StatsLevel::Disabled)
     }
 
     #[test]
     fn db_options_stats_level_full() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Full);
         test_db_options_stats_level(options, StatsLevel::Full)
     }
 
     #[test]
     fn db_options_stats_level_minimal() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Minimal);
         test_db_options_stats_level(options, StatsLevel::Minimal)
     }
 
     #[test]
     fn db_options_stats_level_disabled() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Disabled);
         test_db_options_stats_level(options, StatsLevel::Disabled)
     }
 
     #[test]
     fn db_options_custom_paths() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_db_path("/tmp/db_path");
         options.add_column_family("foo");
         options.set_column_family_path("foo", "/tmp/db_path/foo");
@@ -1389,7 +1386,7 @@ mod tests {
         Ok(())
     }
 
-    fn test_db_options_stats_level(options: DBOptions, level: StatsLevel) -> Result<()> {
+    fn test_db_options_stats_level(options: DbOptions, level: StatsLevel) -> Result<()> {
         let (options, _cfs) = options.into_components()?;
 
         let opts_ptr = options.inner;
@@ -1437,14 +1434,14 @@ mod tests {
 
     #[test]
     fn db_options_block_options_override() -> Result<()> {
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family_opts(
             "foo",
             &hashmap!["block_based_table_factory" => "block_size=64K"],
         );
         options.add_column_family("bar");
 
-        let default_block_opts = options.get_default_cf_block_table_options()?;
+        let default_block_opts = options.get_default_cf_block_table_options();
         let foo_block_opts = options.get_column_family_block_table_options("foo")?;
         let bar_block_opts = options.get_column_family_block_table_options("bar")?;
 
@@ -1546,8 +1543,8 @@ mod tests {
     fn options_string_round_trip() {
         let options = hashmap![ "foo" => "bar", "baz" => "boo" ];
 
-        let options_str = DBOptions::build_options_string(options);
-        let options = DBOptions::parse_options_string(options_str).unwrap();
+        let options_str = DbOptions::build_options_string(options);
+        let options = DbOptions::parse_options_string(options_str);
 
         assert_eq!(
             hashmap![ "foo".to_string() => "bar".to_string(), "baz".to_string() => "boo".to_string() ],
@@ -1567,7 +1564,7 @@ mod tests {
 
         let context = logger.context.clone();
 
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
         let (mut options, _) = options.into_components().unwrap();

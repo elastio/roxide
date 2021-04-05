@@ -4,10 +4,10 @@
 //! transactions if they fail due to a conflict.
 
 use super::op_metrics;
-use crate::db::DBLike;
+use crate::db::DbLike;
 use crate::db::{
-    opt_txdb::{OptimisticTransactionDB, OptimisticTransactionOptions},
-    txdb::{TransactionDB, TransactionOptions},
+    opt_txdb::{OptimisticTransactionDb, OptimisticTransactionOptions},
+    txdb::{TransactionDb, TransactionOptions},
 };
 use crate::db_options::WriteOptions;
 use crate::ffi;
@@ -78,7 +78,7 @@ lazy_static! {
 /// Note that all databases supporting `BeginTrans` must be `Send` and `Sync` so that multiple
 /// transactions can be performed on separate threads
 #[async_trait]
-pub trait BeginTrans: RocksOpBase + DBLike {
+pub trait BeginTrans: RocksOpBase + DbLike {
     /// The type of the native FFI struct that the RocksDB C API expectes for the transaction
     /// options
     type TransactionOptionsNativeType;
@@ -197,7 +197,7 @@ pub trait BeginTrans: RocksOpBase + DBLike {
     /// In RocksDB transactions, it's quite common to have two parallel transactions that interfere
     /// with one another, by both attempting to modify the same record.  What happens when they do
     /// this depends on whether pessimistic locking (`TransactionDB`) or optimistic locking
-    /// (`OptimisticTransactionDB`) is being used, but in either case the result is that one or
+    /// (`OptimisticTransactionDb`) is being used, but in either case the result is that one or
     /// both transactions fail.
     ///
     /// When that happens, in most cases the correct behavior is to re-run the transaction again,
@@ -298,7 +298,7 @@ pub trait BeginTrans: RocksOpBase + DBLike {
 }
 
 #[async_trait::async_trait]
-impl BeginTrans for TransactionDB {
+impl BeginTrans for TransactionDb {
     type TransactionOptionsNativeType = ffi::rocksdb_transaction_options_t;
     type TransactionOptionsType = TransactionOptions;
 
@@ -356,7 +356,7 @@ impl BeginTrans for TransactionDB {
 }
 
 #[async_trait::async_trait]
-impl BeginTrans for OptimisticTransactionDB {
+impl BeginTrans for OptimisticTransactionDb {
     type TransactionOptionsNativeType = ffi::rocksdb_optimistictransaction_options_t;
     type TransactionOptionsType = OptimisticTransactionOptions;
 
@@ -408,7 +408,7 @@ struct RetryableTransaction<'a, DBT> {
     delay: Histogram,
 }
 
-impl<'a, DBT: DBLike + BeginTrans> RetryableTransaction<'a, DBT> {
+impl<'a, DBT: DbLike + BeginTrans> RetryableTransaction<'a, DBT> {
     fn new(db: &'a DBT) -> Self {
         let policy = build_trans_retry_policy();
         let retry_delays = policy.backoffs();
@@ -843,10 +843,10 @@ fn build_trans_retry_policy() -> try_again::Policy {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{ColumnFamilyLike, DBLike};
+    use crate::db::{ColumnFamilyLike, DbLike};
     use crate::ops::*;
     use crate::test;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
     use rand::prelude::*;
 
     /// Tests exercise `begin_trans` in the various database types, sync and async
@@ -855,8 +855,8 @@ mod test {
 
         #[test]
         fn txdb() -> Result<()> {
-            let path = TempDBPath::new();
-            let db = TransactionDB::open(&path, None)?;
+            let path = TempDbPath::new();
+            let db = TransactionDb::open(&path, None)?;
             let _cf = db.get_cf("default").unwrap();
 
             let _trans = db.begin_trans(None, None)?;
@@ -866,8 +866,8 @@ mod test {
 
         #[test]
         fn opt_txdb() -> Result<()> {
-            let path = TempDBPath::new();
-            let db = OptimisticTransactionDB::open(&path, None)?;
+            let path = TempDbPath::new();
+            let db = OptimisticTransactionDb::open(&path, None)?;
             let _cf = db.get_cf("default").unwrap();
 
             let _trans = db.begin_trans(None, None)?;
@@ -877,8 +877,8 @@ mod test {
 
         #[tokio::test]
         async fn txdb_async() -> Result<()> {
-            let path = TempDBPath::new();
-            let db = TransactionDB::open(&path, None)?;
+            let path = TempDbPath::new();
+            let db = TransactionDb::open(&path, None)?;
             let cf = db.get_cf("default").unwrap();
 
             let tx = db.async_begin_trans(None, None).await?;
@@ -930,20 +930,20 @@ mod test {
             /// retry logic keeps retrying until the operation succeeds.
             #[test]
             fn txdb() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = TransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = TransactionDb::open(&path, None)?;
                 conflict_impl(db)
             }
 
             /// Async equivalent of txdb_with_trans_retryable_conflicts
             #[tokio::test]
             async fn txdb_async() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = TransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = TransactionDb::open(&path, None)?;
                 conflict_impl_async(db).await
             }
 
-            /// Same test as above but with `OptimisticTransactionDB` and therefore optimistic locking.
+            /// Same test as above but with `OptimisticTransactionDb` and therefore optimistic locking.
             ///
             /// This kind of locking is a poor choice for cases where conflicts between transactions are
             /// likely, because those conflicts won't be detected until commit time by which point all
@@ -951,16 +951,16 @@ mod test {
             /// the transactions make any progress.
             #[test]
             fn opt_txdb() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = OptimisticTransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = OptimisticTransactionDb::open(&path, None)?;
                 conflict_impl(db)
             }
 
             /// Async equivalent of txdb_with_trans_retryable_conflicts
             #[tokio::test]
             async fn opt_txdb_async() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = OptimisticTransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = OptimisticTransactionDb::open(&path, None)?;
                 conflict_impl_async(db).await
             }
 
@@ -968,7 +968,7 @@ mod test {
             /// in the presence of conflicts.
             ///
             /// This is generic over the actual database type, as long as it supports transactions.
-            fn conflict_impl(db: impl DBLike + BeginTrans) -> Result<()> {
+            fn conflict_impl(db: impl DbLike + BeginTrans) -> Result<()> {
                 let cf = db.get_cf("default").unwrap();
                 let keys = generate_test_keys();
 
@@ -1004,13 +1004,15 @@ mod test {
 
                     validate_test_keys(&db, keys)?;
 
-                    validate_test_metrics(&db)
+                    validate_test_metrics(&db);
+
+                    Ok(())
                 })
             }
 
             /// Async version of `conflig_impl`
             #[allow(clippy::async_yields_async)] // The `async` block yielding a future is needed here to satisfy the borrow checker
-            async fn conflict_impl_async<DBT: DBLike + BeginTrans>(db: DBT) -> Result<()>
+            async fn conflict_impl_async<DBT: DbLike + BeginTrans>(db: DBT) -> Result<()>
             where
                 <DBT as RocksOpBase>::HandleType: Sync + Send,
                 DBT::TransactionOptionsType: Send + 'static,
@@ -1057,7 +1059,9 @@ mod test {
 
                     validate_test_keys(&db, keys)?;
 
-                    validate_test_metrics(&db)
+                    validate_test_metrics(&db);
+
+                    Ok(())
                 })
                 .await
             }
@@ -1066,7 +1070,7 @@ mod test {
                 (0u64..KEYS_PER_CONFLICTING_TX as u64).into_iter().collect()
             }
 
-            fn validate_test_keys<DBT: DBLike + BeginTrans>(
+            fn validate_test_keys<DBT: DbLike + BeginTrans>(
                 db: &DBT,
                 keys: Vec<u64>,
             ) -> Result<()> {
@@ -1093,7 +1097,7 @@ mod test {
             }
 
             #[allow(clippy::float_cmp)] // Testing that the sum is != 0 is the correct assertion here
-            fn validate_test_metrics<DBT: DBLike + BeginTrans>(db: &DBT) -> Result<()> {
+            fn validate_test_metrics<DBT: DbLike + BeginTrans>(db: &DBT) {
                 // Validate that the metrics got the expected values
                 let labels = DatabaseLabels::from(db);
                 let total = RETRYABLE_TX_TOTAL_METRIC.apply_labels(&labels).unwrap();
@@ -1131,8 +1135,6 @@ mod test {
                 // Impossible to predict the statistical distribution of the total delay, but we can
                 // say for sure that there were definitely some delays
                 assert_ne!(0.0, (delay.get_sample_sum()));
-
-                Ok(())
             }
         }
 
@@ -1143,15 +1145,15 @@ mod test {
 
             #[test]
             fn txdb() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = TransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = TransactionDb::open(&path, None)?;
                 no_conflicts_impl(db)
             }
 
             #[test]
             fn opt_txdb() -> Result<()> {
-                let path = TempDBPath::new();
-                let db = OptimisticTransactionDB::open(&path, None)?;
+                let path = TempDbPath::new();
+                let db = OptimisticTransactionDb::open(&path, None)?;
                 no_conflicts_impl(db)
             }
 
@@ -1161,7 +1163,7 @@ mod test {
             ///
             /// This is generic over the actual database type, as long as it supports transactions.
             #[allow(clippy::float_cmp)] // Testing that the sum is != 0 is the correct assertion here
-            fn no_conflicts_impl(db: impl DBLike + BeginTrans) -> Result<()> {
+            fn no_conflicts_impl(db: impl DbLike + BeginTrans) -> Result<()> {
                 let cf = db.get_cf("default").unwrap();
 
                 let mut all_keys =

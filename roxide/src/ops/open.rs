@@ -14,7 +14,7 @@ use crate::ffi;
 use crate::ffi_try;
 use crate::ffi_util::{path_to_cstring, path_to_string};
 
-pub trait DBOpen: Sized {
+pub trait DbOpen: Sized {
     /// Open a RocksDB database at a given path.  This might or might not exist, and might or might
     /// not be created if it doesn't exist, depending on the options selected.
     ///
@@ -22,14 +22,14 @@ pub trait DBOpen: Sized {
     fn open<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>;
+        O: Into<Option<DbOptions>>;
 
     /// Open a RocksDB database at a given path.  If the database doesn't exist at this path, the
     /// open will fail.
     fn open_existing<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         let mut options = db_options.into().unwrap_or_default();
 
@@ -44,7 +44,7 @@ pub trait DBOpen: Sized {
     fn create_new<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         let mut options = db_options.into().unwrap_or_default();
 
@@ -55,7 +55,7 @@ pub trait DBOpen: Sized {
     }
 }
 
-pub trait DBOpenReadOnly: Sized {
+pub trait DbOpenReadOnly: Sized {
     /// Open an existing RocksDB database read-only.  Any operations which cause the database to
     /// change, like `Put`, will fail.
     ///
@@ -65,18 +65,18 @@ pub trait DBOpenReadOnly: Sized {
     fn open_readonly<P, O>(path: P, db_options: O, fail_if_log_file_exists: bool) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>;
+        O: Into<Option<DbOptions>>;
 }
 
 // Private helper that sets up the logging settings for a database if they aren't already
 // configured
-fn ensure_logging_configured(path: &Path, options: &mut DBOptions) {
+fn ensure_logging_configured(path: &Path, options: &mut DbOptions) {
     let (level, logger) = crate::logging::get_default_logger(path);
 
     options.set_default_logger(level, logger);
 }
 
-impl DBOpen for DB {
+impl DbOpen for Db {
     /// Open a RocksDB database at a given path.  This might or might not exist, and might or might
     /// not be created if it doesn't exist, depending on the options selected.
     ///
@@ -84,18 +84,18 @@ impl DBOpen for DB {
     fn open<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         // Set up a default logger if there isn't already one
 
         // Call the RocksDB open API and get a database object
         let (db_ptr, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
 
-        Ok(DB::new(path, DBHandle::new(db_ptr), cfs))
+        Ok(Db::new(path, DbHandle::new(db_ptr), cfs))
     }
 }
 
-impl DBOpenReadOnly for DB {
+impl DbOpenReadOnly for Db {
     /// Open an existing RocksDB database read-only.  Any operations which cause the database to
     /// change, like `Put`, will fail.
     ///
@@ -105,7 +105,7 @@ impl DBOpenReadOnly for DB {
     fn open_readonly<P, O>(path: P, db_options: O, fail_if_log_file_exists: bool) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
         let (db_ptr, cfs) = ffi_open_helper(
@@ -131,7 +131,7 @@ impl DBOpenReadOnly for DB {
             },
         )?;
 
-        Ok(DB::new(path, DBHandle::new(db_ptr), cfs))
+        Ok(Db::new(path, DbHandle::new(db_ptr), cfs))
     }
 }
 
@@ -139,7 +139,7 @@ cpp! {{
     #include "src/lib.h"
 }}
 
-impl DBOpen for TransactionDB {
+impl DbOpen for TransactionDb {
     /// Opens a RocksDB database with transaction semantics
     ///
     /// TODO: Provide  Rust wrapper for the `TransactionDBOptions` type to control the transaction
@@ -147,7 +147,7 @@ impl DBOpen for TransactionDB {
     fn open<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
         let (db_ptr, cfs) = ffi_open_helper(
@@ -203,26 +203,26 @@ impl DBOpen for TransactionDB {
             },
         )?;
 
-        Ok(TransactionDB::new(
+        Ok(TransactionDb::new(
             path,
-            TransactionDBHandle::new(db_ptr),
+            TransactionDbHandle::new(db_ptr),
             cfs,
         ))
     }
 }
 
-impl DBOpen for OptimisticTransactionDB {
+impl DbOpen for OptimisticTransactionDb {
     fn open<P, O>(path: P, db_options: O) -> Result<Self>
     where
         P: AsRef<Path>,
-        O: Into<Option<DBOptions>>,
+        O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
         let (db_ptr, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
 
-        Ok(OptimisticTransactionDB::new(
+        Ok(OptimisticTransactionDb::new(
             path,
-            OptimisticTransactionDBHandle::new(db_ptr),
+            OptimisticTransactionDbHandle::new(db_ptr),
             cfs,
         ))
     }
@@ -239,7 +239,7 @@ fn ffi_open_helper<DB, P, O, F>(
 ) -> Result<(ptr::NonNull<DB>, HashMap<String, ColumnFamilyHandle>)>
 where
     P: AsRef<Path>,
-    O: Into<Option<DBOptions>>,
+    O: Into<Option<DbOptions>>,
     F: FnOnce(
         *const ffi::rocksdb_options_t,                 // database options
         *const libc::c_char,                           // database path
@@ -319,35 +319,35 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::TempDBPath;
+    use crate::TempDbPath;
 
     #[test]
     fn db_open() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = crate::db_options::DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = crate::db_options::DbOptions::default();
         options.add_column_family("foo");
 
         let bto = options.get_default_cf_block_table_options();
 
         println!("BTO: {:?}", bto);
         println!("options: {:?}", options);
-        let _db = DB::open(&path, options)?;
+        let _db = Db::open(&path, options)?;
 
         Ok(())
     }
 
     #[test]
     fn txdb_open() -> Result<()> {
-        let path = TempDBPath::new();
-        let _db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let _db = TransactionDb::open(&path, None)?;
 
         Ok(())
     }
 
     #[test]
     fn opt_txdb_open() -> Result<()> {
-        let path = TempDBPath::new();
-        let _db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let _db = OptimisticTransactionDb::open(&path, None)?;
 
         Ok(())
     }

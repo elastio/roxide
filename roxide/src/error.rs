@@ -44,10 +44,10 @@ lazy_static! {
 #[derive(Debug, Snafu, AsRefStr)]
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
-    /// An actual RocksDB error, reported via the RocksDB API.  Should have a status code to
+    /// An actual RocksDb error, reported via the RocksDb API.  Should have a status code to
     /// support programmatically testing for a specific error type
     #[snafu(display("rocksdb: {}\n{}", status, backtrace))]
-    RocksDBError {
+    RocksDbError {
         status: status::Status,
         backtrace: Backtrace,
     },
@@ -59,7 +59,7 @@ pub enum Error {
     /// handling that specific type of rocks error is common therefore having a dedicated error
     /// variant for it makes calling code easier.
     #[snafu(display("rocksdb lock timed out"))]
-    RocksDBLockTimeout { backtrace: Backtrace },
+    RocksDbLockTimeout { backtrace: Backtrace },
 
     /// A deadlock was detected in a TransactionDB.
     ///
@@ -68,7 +68,7 @@ pub enum Error {
         "rocksdb transaction deadlocked.  Recent deadlocks for debugging purposes: \n{:#?}",
         deadlock_paths
     ))]
-    RocksDBDeadlock {
+    RocksDbDeadlock {
         backtrace: Backtrace,
         deadlock_paths: Vec<crate::DeadlockPath>,
     },
@@ -76,17 +76,17 @@ pub enum Error {
     /// A conflict between two competiting transactions was detected in an
     /// `OptimisticTransactionDB`.
     ///
-    /// This error is specific to optimistic locking.  On a `TransactionDB` the same scenario would
-    /// fail with either `RocksDBLockTimeout` or `RocksDBDeadlock` depending on whether or not
+    /// This error is specific to optimistic locking.  On a `TransactionDb` the same scenario would
+    /// fail with either `RocksDbLockTimeout` or `RocksDbDeadlock` depending on whether or not
     /// deadlock detection is enabled.
     #[snafu(display("rocksdb detected a conflict between two optimistic locking transactions"))]
-    RocksDBConflict { backtrace: Backtrace },
+    RocksDbConflict { backtrace: Backtrace },
 
     /// An error returned by the `rust-rocksdb` wrapper.
     ///
     /// This contains just a string error message, with no additional context.
     #[snafu(display("RocksDB"))]
-    RustRocksDBError {
+    RustRocksDbError {
         source: rocksdb::Error,
         backtrace: Backtrace,
     },
@@ -100,7 +100,7 @@ pub enum Error {
     },
 
     #[snafu(display("Unable to enable statistics on this database because it was initialized with statistics disabled"))]
-    DBStatsDisabledError,
+    DbStatsDisabledError,
 
     #[snafu(display("The property named '{}' was not found", property_name))]
     PropertyNotFoundError { property_name: String },
@@ -119,7 +119,7 @@ pub enum Error {
     OtherError { message: String },
 
     #[snafu(display("The path '{}' is not a valid UTF-8 string", path.display()))]
-    PathNotValidUTF8 { path: PathBuf },
+    PathNotValidUtf8 { path: PathBuf },
 
     #[snafu(display("The path '{}' contains embedded NUL bytes so it can't be passed to a C function", path.display()))]
     PathHasNullBytes {
@@ -180,9 +180,12 @@ impl Error {
 
 impl TransactionRetryError for Error {
     fn retry_transaction(&self) -> bool {
-        matches!(self, Self::RocksDBDeadlock { .. }
-            | Self::RocksDBLockTimeout { .. }
-            | Self::RocksDBConflict { .. })
+        matches!(
+            self,
+            Self::RocksDbDeadlock { .. }
+                | Self::RocksDbLockTimeout { .. }
+                | Self::RocksDbConflict { .. }
+        )
     }
 }
 

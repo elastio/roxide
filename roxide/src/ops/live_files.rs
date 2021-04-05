@@ -5,9 +5,9 @@
 //! considered "live", so we use the live files information to determine what files to store in S3.
 use super::op_metrics;
 use super::*;
-use crate::db::DBLike;
+use crate::db::DbLike;
 use crate::ffi_util;
-use crate::ops::get_db_ptr::GetDBPtr;
+use crate::ops::get_db_ptr::GetDbPtr;
 use crate::Result;
 use std::path::PathBuf;
 
@@ -37,7 +37,7 @@ pub trait GetLiveFiles: RocksOpBase {
 
 impl<DB> GetLiveFiles for DB
 where
-    DB: DBLike + GetDBPtr,
+    DB: DbLike + GetDbPtr,
 {
     fn get_live_files(&self) -> Result<Vec<SstFile>> {
         op_metrics::instrument_db_op(
@@ -100,13 +100,13 @@ where
 mod test {
     use super::*;
     use crate::db::db::*;
-    use crate::db::{ColumnFamilyLike, DBLike};
+    use crate::db::{ColumnFamilyLike, DbLike};
     use crate::ops::Compact;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
 
-    fn create_test_db() -> Result<(TempDBPath, DB, DBColumnFamily)> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+    fn create_test_db() -> Result<(TempDbPath, Db, DbColumnFamily)> {
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         Ok((path, db, cf))

@@ -4,7 +4,7 @@
 //! This is useful to track when a particular write operation has been persisted to disk or to
 //! remote long-term storage in S3.
 use super::*;
-use crate::ops::get_db_ptr::GetDBPtr;
+use crate::ops::get_db_ptr::GetDbPtr;
 
 pub trait GetLatestSequenceNumber: RocksOpBase {
     /// Get the sequence number of the last write operation in the database
@@ -13,7 +13,7 @@ pub trait GetLatestSequenceNumber: RocksOpBase {
 
 impl<DB> GetLatestSequenceNumber for DB
 where
-    DB: GetDBPtr,
+    DB: GetDbPtr,
 {
     fn get_latest_sequence_number(&self) -> u64 {
         let db_ptr = self.get_db_ptr();
@@ -34,13 +34,13 @@ where
 mod test {
     use super::*;
     use crate::db::db::*;
-    use crate::db::DBLike;
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::test::TempDbPath;
     use crate::Result;
 
-    fn create_test_db() -> Result<(TempDBPath, DB, DBColumnFamily)> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+    fn create_test_db() -> Result<(TempDbPath, Db, DbColumnFamily)> {
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         Ok((path, db, cf))

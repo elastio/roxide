@@ -13,11 +13,11 @@
 use std::sync::Arc;
 
 use crate::db::ColumnFamilyLike;
-use crate::db::DBLike;
+use crate::db::DbLike;
 use cheburashka::labels::LabelSet;
 use cheburashka::logging::AsSpan;
 
-pub fn get_db_metric_labels(db: &impl crate::db::DBLike) -> DatabaseLabels {
+pub fn get_db_metric_labels(db: &impl crate::db::DbLike) -> DatabaseLabels {
     DatabaseLabels {
         path: db.path_str(),
         db_id: db.db_id(),
@@ -58,7 +58,7 @@ pub struct DatabaseLabels<'a> {
     pub db_id: &'a str,
 }
 
-impl<'a, DB: DBLike> From<&'a DB> for DatabaseLabels<'a> {
+impl<'a, DB: DbLike> From<&'a DB> for DatabaseLabels<'a> {
     fn from(db: &'a DB) -> Self {
         DatabaseLabels {
             path: db.path_str(),
@@ -91,7 +91,7 @@ pub struct DatabaseOperationLabels<'a> {
 }
 
 impl<'a> DatabaseOperationLabels<'a> {
-    pub fn new(db: &'a impl DBLike, op_name: &'static str) -> Self {
+    pub fn new(db: &'a impl DbLike, op_name: &'static str) -> Self {
         DatabaseOperationLabels {
             db_labels: db.into(),
             op_name,

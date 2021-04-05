@@ -356,10 +356,10 @@ impl<CF: ColumnFamilyLike> ColumnFamilyOperationMetricsReporter<CF> {
     fn report_error(&self, err: &Error) {
         self.op_failed.inc();
         match err {
-            Error::RocksDBError { status, backtrace } => {
+            Error::RocksDbError { status, backtrace } => {
                 error!(target: "rocksdb_cf_op", op_name = self.op_name, cf_name = %self.cf.name(), %status, %backtrace, "RocksDB database error");
             }
-            Error::RocksDBDeadlock { deadlock_paths, .. } => {
+            Error::RocksDbDeadlock { deadlock_paths, .. } => {
                 // This is usually something that happens in the context of a retriable
                 // transaction, so it's an expected error.  Log that at the warning level to avoid
                 // spooking whoever views the log output
@@ -367,10 +367,10 @@ impl<CF: ColumnFamilyLike> ColumnFamilyOperationMetricsReporter<CF> {
                     "Deadlock in RocksDB transaction"
                 );
             }
-            Error::RocksDBLockTimeout { .. } => {
+            Error::RocksDbLockTimeout { .. } => {
                 // As with deadlocks, this is usually a sign of a transaction conflict.  If
                 // deadlock detection is enabled, normally conflicts result in deadlocks and fail
-                // with `RocksDBDeadlock`, however for pessimistic locking databases without
+                // with `RocksDbDeadlock`, however for pessimistic locking databases without
                 // deadlock detection, or in cases where the lock times out but there is no
                 // deadlock, this error can happen also.  It's also retriable and therefore should
                 // not be logged at the error level

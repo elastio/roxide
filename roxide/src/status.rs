@@ -30,7 +30,7 @@ pub enum Code {
     Corruption = 2,
     NotSupported = 3,
     InvalidArgument = 4,
-    IOError = 5,
+    IoError = 5,
     MergeInProgress = 6,
     Incomplete = 7,
     ShutdownInProgress = 8,
@@ -178,12 +178,12 @@ impl Status {
         } else if self.code == Code::TimedOut && self.subcode == SubCode::LockTimeout {
             // There's a special error variant specifically for this case to make it more
             // convenient for calling code to detect
-            error::RocksDBLockTimeout
+            error::RocksDbLockTimeout
                 .fail()
                 .map_err(error::Error::report)
         } else {
             // Some other rocks error that doesn't indicate a lock timeout
-            error::RocksDBError { status: self }
+            error::RocksDbError { status: self }
                 .fail()
                 .map_err(error::Error::report)
         }
@@ -265,7 +265,7 @@ mod test {
     #[test]
     fn handles_failure_with_subcode() {
         assert_eq!(
-            "IOError (NoSpace)",
+            "IoError (NoSpace)",
             format!("{}", generate_failure_with_subcode().into_status())
         );
         assert!(generate_failure_with_subcode().into_result().is_err());

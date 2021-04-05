@@ -16,7 +16,7 @@ pub trait Write: RocksOpBase {
     fn write(&self, batch: WriteBatch, options: impl Into<Option<WriteOptions>>) -> Result<()>;
 }
 
-impl Write for DB {
+impl Write for Db {
     fn write(&self, batch: WriteBatch, options: impl Into<Option<WriteOptions>>) -> Result<()> {
         op_metrics::instrument_db_op(self, op_metrics::DatabaseOperation::Write, move || {
             let options = WriteOptions::from_option(options.into());
@@ -32,7 +32,7 @@ impl Write for DB {
     }
 }
 
-impl Write for TransactionDB {
+impl Write for TransactionDb {
     fn write(&self, batch: WriteBatch, options: impl Into<Option<WriteOptions>>) -> Result<()> {
         op_metrics::instrument_db_op(self, op_metrics::DatabaseOperation::Write, move || {
             let options = WriteOptions::from_option(options.into());
@@ -48,7 +48,7 @@ impl Write for TransactionDB {
     }
 }
 
-impl Write for OptimisticTransactionDB {
+impl Write for OptimisticTransactionDb {
     fn write(&self, batch: WriteBatch, options: impl Into<Option<WriteOptions>>) -> Result<()> {
         op_metrics::instrument_db_op(self, op_metrics::DatabaseOperation::Write, move || {
             let options = WriteOptions::from_option(options.into());
@@ -71,14 +71,14 @@ impl Write for OptimisticTransactionDB {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::DBLike;
-    use crate::ops::{DBOpen, Put};
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::ops::{DbOpen, Put};
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_write() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let batch = WriteBatch::new()?;
@@ -92,8 +92,8 @@ mod test {
 
     #[test]
     fn txdb_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let batch = WriteBatch::new()?;
@@ -107,8 +107,8 @@ mod test {
 
     #[test]
     fn opt_txdb_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let batch = WriteBatch::new()?;

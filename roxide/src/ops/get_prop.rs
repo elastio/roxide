@@ -6,7 +6,7 @@
 use super::op_metrics;
 use super::*;
 use crate::db;
-use crate::ops::get_db_ptr::GetDBPtr;
+use crate::ops::get_db_ptr::GetDbPtr;
 use crate::{Error, Result};
 
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ pub enum RocksProperty {
 
     // static const std::string sstables = "sstables";
     #[strum(props(type = "string", name = "rocksdb.sstables"))]
-    SSTables,
+    SsTables,
 
     // static const std::string cfstats = "cfstats";
     #[strum(props(type = "map", name = "rocksdb.cfstats"))]
@@ -58,15 +58,15 @@ pub enum RocksProperty {
     // static const std::string cfstats_no_file_histogram =
     //    "cfstats-no-file-histogram";
     #[strum(props(type = "string", name = "rocksdb.cfstats-no-file-histogram"))]
-    CFStatsNoFileHistogram,
+    CfStatsNoFileHistogram,
 
     // static const std::string cf_file_histogram = "cf-file-histogram";
     #[strum(props(type = "string", name = "rocksdb.cf-file-histogram"))]
-    CFFileHistogram,
+    CfFileHistogram,
 
     // static const std::string dbstats = "dbstats";
     #[strum(props(type = "string", name = "rocksdb.dbstats"))]
-    DBStats,
+    DbStats,
 
     // static const std::string levelstats = "levelstats";
     #[strum(props(type = "string", name = "rocksdb.levelstats"))]
@@ -247,11 +247,11 @@ impl RocksProperty {
         // there are
         let mut properties = vec![
             AllStats,
-            SSTables,
+            SsTables,
             ColumnFamilyStats,
-            CFStatsNoFileHistogram,
-            CFFileHistogram,
-            DBStats,
+            CfStatsNoFileHistogram,
+            CfFileHistogram,
+            DbStats,
             LevelStats,
             NumImmutableMemTable,
             NumImmutableMemTableFlushed,
@@ -613,7 +613,7 @@ pub trait GetProperty: RocksOpBase {
 
 impl<DB> GetProperty for DB
 where
-    DB: GetDBPtr,
+    DB: GetDbPtr,
 {
     fn get_number_of_levels(&self, cf: &impl db::ColumnFamilyLike) -> LevelNumber {
         let db_ptr = self.get_db_ptr();
@@ -652,15 +652,15 @@ where
 mod test {
     use super::*;
     use crate::db::db::*;
-    use crate::db::DBLike;
+    use crate::db::DbLike;
     use crate::ops::Compact;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
 
     use more_asserts::*;
 
-    fn create_test_db() -> Result<(TempDBPath, DB, DBColumnFamily)> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+    fn create_test_db() -> Result<(TempDbPath, Db, DbColumnFamily)> {
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write some data and compact to create some levels

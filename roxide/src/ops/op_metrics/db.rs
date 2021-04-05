@@ -6,7 +6,7 @@ use super::AsyncDbOpFuture;
 use crate::labels::DatabaseOperationLabels;
 use crate::logging::LoggingContext;
 use crate::metrics;
-use crate::{db::DBLike, error::ErrorPostprocessor};
+use crate::{db::DbLike, error::ErrorPostprocessor};
 use crate::{Error, Result};
 use cheburashka::{logging::prelude::*, metrics::*};
 use lazy_static::lazy_static;
@@ -53,8 +53,8 @@ lazy_static! {
         .unwrap();
 }
 
-fn db_metrics<'a>(
-    labels: &DatabaseOperationLabels<'a>,
+fn db_metrics(
+    labels: &DatabaseOperationLabels<'_>,
 ) -> Result<(IntCounter, IntGauge, IntCounter, Histogram)> {
     Ok((
         DB_OP_TOTAL_METRIC.apply_labels(labels)?,
@@ -80,7 +80,7 @@ pub(crate) fn instrument_tx_op<R, F: FnOnce() -> Result<R>>(
 /// Instruments a database operation, by updating metrics and setting the appropriate logging
 /// context.
 pub(crate) fn instrument_db_op<R, F: FnOnce() -> Result<R>>(
-    db: &impl DBLike,
+    db: &impl DbLike,
     op: DatabaseOperation,
     func: F,
 ) -> Result<R> {
@@ -96,7 +96,7 @@ pub(crate) fn instrument_async_db_op<
     R,
     F: FnOnce(DatabaseOperationLabels) -> crate::future::BlockingOpFuture<R>,
 >(
-    db: &impl DBLike,
+    db: &impl DbLike,
     op: DatabaseOperation,
     func: F,
 ) -> AsyncDbOpFuture<R> {
@@ -176,7 +176,7 @@ fn instrument_db_op_internal<R, F: FnOnce() -> Result<R>>(
 #[allow(clippy::cognitive_complexity)] // the complexity is low; clippy is seeing the macro expansion
 fn report_error(err: &Error) {
     match err {
-        Error::RocksDBConflict { .. } => {
+        Error::RocksDbConflict { .. } => {
             // This looks like how a commit operation fails when there is a conflict between
             // transactions on a database using optimistic locking.
             //
@@ -185,7 +185,7 @@ fn report_error(err: &Error) {
             // time to log it as an error
             warn!(target: "rocksdb_db_op", "Busy error from RocksDB which usually indicates a conflict between transactions");
         }
-        Error::RocksDBError { status, backtrace } => {
+        Error::RocksDbError { status, backtrace } => {
             error!(target: "rocksdb_db_op", status = %status, %backtrace, "RocksDB database error");
         }
         Error::DatabaseError { message, backtrace } => {

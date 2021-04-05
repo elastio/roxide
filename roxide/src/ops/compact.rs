@@ -78,7 +78,7 @@ pub trait Compact: RocksOpBase {
     }
 }
 
-impl Compact for DB {
+impl Compact for Db {
     fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactionOptions>>>(
         &self,
         cf: &CF,
@@ -112,14 +112,14 @@ impl Compact for DB {
     }
 }
 
-// I know what you're thinking: "where is the `TransactionDB` impl"?  The Rocks C FFI doesn't have
+// I know what you're thinking: "where is the `TransactionDb` impl"?  The Rocks C FFI doesn't have
 // a compact range function that takes a `rocksdb_transactiondb_t` pointer.  I'm pretty sure it's
 // supported in the C++ code but it somehow fell through the cracks in the C bindings.  The only
-// reason it works on `OptimisticTransactionDB` is because it's possible to get the base DB handle
+// reason it works on `OptimisticTransactionDb` is because it's possible to get the base Db handle
 // for an optimistic db.
 //
 // For now there's a dummy impl that panics; someday a proper implementation needs to be provided
-impl Compact for TransactionDB {
+impl Compact for TransactionDb {
     fn compact_range<
         'a,
         CF: db::ColumnFamilyLike,
@@ -135,7 +135,7 @@ impl Compact for TransactionDB {
     }
 }
 
-impl Compact for OptimisticTransactionDB {
+impl Compact for OptimisticTransactionDb {
     fn compact_range<
         'a,
         CF: db::ColumnFamilyLike,
@@ -180,13 +180,13 @@ impl Compact for OptimisticTransactionDB {
 mod test {
     use super::super::put::Put;
     use super::*;
-    use crate::db::DBLike;
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_compact() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -198,8 +198,8 @@ mod test {
 
     #[test]
     fn opt_txdb_compact() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;

@@ -192,7 +192,7 @@ pub trait Put: RocksOpBase {
     }
 }
 
-impl Put for DB {
+impl Put for Db {
     unsafe fn raw_put(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -212,7 +212,7 @@ impl Put for DB {
     }
 }
 
-impl Put for TransactionDB {
+impl Put for TransactionDb {
     unsafe fn raw_put(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -232,7 +232,7 @@ impl Put for TransactionDB {
     }
 }
 
-impl Put for OptimisticTransactionDB {
+impl Put for OptimisticTransactionDb {
     unsafe fn raw_put(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -447,14 +447,14 @@ impl Put for sync::Transaction {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::DBLike;
+    use crate::db::DbLike;
     use crate::ops::begin_tx::BeginTrans;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -465,8 +465,8 @@ mod test {
 
     #[test]
     fn txdb_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -477,8 +477,8 @@ mod test {
 
     #[test]
     fn opt_txdb_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -489,8 +489,8 @@ mod test {
 
     #[test]
     fn batch_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let batch = WriteBatch::new()?;
@@ -502,8 +502,8 @@ mod test {
 
     #[test]
     fn tx_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -517,8 +517,8 @@ mod test {
 
     #[test]
     fn sync_tx_simple_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?.into_sync();

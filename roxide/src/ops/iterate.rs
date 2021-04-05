@@ -7,7 +7,7 @@ use crate::db_options::ReadOptions;
 use crate::ffi;
 use crate::handle::{self, RocksObject, RocksObjectDefault};
 use crate::iterator::{
-    DBRangeIterator, RocksIterator, TransactionRangeIterator, UnboundedIterator,
+    DbRangeIterator, RocksIterator, TransactionRangeIterator, UnboundedIterator,
 };
 use crate::tx::{sync, unsync};
 use crate::{Error, Result};
@@ -374,8 +374,8 @@ pub trait IteratePrefix: RocksOpBase + IterateInternal {
 }
 
 // All three database types support all iteration, including range and prefix
-impl IterateInternal for DB {
-    type InternalRangeIter = DBRangeIterator;
+impl IterateInternal for Db {
+    type InternalRangeIter = DbRangeIterator;
     type InternalPrefixIter = UnboundedIterator;
 
     unsafe fn raw_iterate(
@@ -393,8 +393,8 @@ impl IterateInternal for DB {
     }
 }
 
-impl IterateInternal for TransactionDB {
-    type InternalRangeIter = DBRangeIterator;
+impl IterateInternal for TransactionDb {
+    type InternalRangeIter = DbRangeIterator;
     type InternalPrefixIter = UnboundedIterator;
 
     unsafe fn raw_iterate(
@@ -412,8 +412,8 @@ impl IterateInternal for TransactionDB {
     }
 }
 
-impl IterateInternal for OptimisticTransactionDB {
-    type InternalRangeIter = DBRangeIterator;
+impl IterateInternal for OptimisticTransactionDb {
+    type InternalRangeIter = DbRangeIterator;
     type InternalPrefixIter = UnboundedIterator;
 
     unsafe fn raw_iterate(
@@ -437,7 +437,7 @@ impl IterateInternal for OptimisticTransactionDB {
 /// `iterate_with_prefix_hint` functions should actually tell Rocks about the prefix).
 ///
 /// In effect this means implementing `IterateAll` for `DB`, TransactionDB`, and
-/// `OptimisticTransactionDB`
+/// `OptimisticTransactionDb`
 impl<
         T: IterateInternal<InternalPrefixIter = UnboundedIterator>
             + IteratePrefix<PrefixIter = UnboundedIterator>,
@@ -469,8 +469,8 @@ impl<
 }
 
 /// Implement range iteration for all of the DB-based impls of `IterateInternal`
-impl<T: IterateInternal<InternalRangeIter = DBRangeIterator>> IterateRange for T {
-    type RangeIter = DBRangeIterator;
+impl<T: IterateInternal<InternalRangeIter = DbRangeIterator>> IterateRange for T {
+    type RangeIter = DbRangeIterator;
 
     fn iterate_range<K: BinaryStr>(
         &self,
@@ -492,7 +492,7 @@ impl<T: IterateInternal<InternalRangeIter = DBRangeIterator>> IterateRange for T
                 };
 
                 if let Some(iterator_ptr) = ptr::NonNull::new(iterator_ptr) {
-                    Ok(DBRangeIterator::new(
+                    Ok(DbRangeIterator::new(
                         handle::AnonymousHandle::wrap_opaque_type(self.handle().clone()),
                         iterator_ptr,
                         options,
@@ -536,7 +536,7 @@ impl<T: IterateInternal<InternalRangeIter = DBRangeIterator>> IterateRange for T
                         unsafe { Self::raw_iterate(&handle, cf.rocks_ptr(), options.rocks_ptr())? };
 
                     if let Some(iterator_ptr) = ptr::NonNull::new(iterator_ptr) {
-                        Ok(DBRangeIterator::new(
+                        Ok(DbRangeIterator::new(
                             handle::AnonymousHandle::wrap_opaque_type(handle.clone()),
                             iterator_ptr,
                             options,
@@ -790,13 +790,13 @@ impl IterateRange for sync::Transaction {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::DBLike;
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let _iter = db.iterate_all(&cf, None)?;
@@ -806,8 +806,8 @@ mod test {
 
     #[test]
     fn txdb_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let _iter = db.iterate_all(&cf, None)?;
@@ -817,8 +817,8 @@ mod test {
 
     #[test]
     fn opt_txdb_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let _iter = db.iterate_all(&cf, None)?;
@@ -828,8 +828,8 @@ mod test {
 
     #[test]
     fn tx_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -841,8 +841,8 @@ mod test {
 
     #[tokio::test]
     async fn db_async_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let _iter = db.async_iterate_all(&cf, None).await?;
@@ -852,8 +852,8 @@ mod test {
 
     #[tokio::test]
     async fn tx_async_iterate_all() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         let tx = db.begin_trans(None, None)?.into_sync();
 

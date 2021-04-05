@@ -1,13 +1,13 @@
-//! This module implements `TransactionDB`, which is a variant of `DB` which supports two-phase
+//! This module implements `TransactionDb`, which is a variant of `DB` which supports two-phase
 //! commit transaction semantics `Begin/Commit/Rollback`
 use super::*;
 use crate::rocks_class;
 use once_cell::sync::OnceCell;
 use std::ptr;
 
-rocks_class!(TransactionDBHandle, ffi::rocksdb_transactiondb_t, ffi::rocksdb_transactiondb_close, @send, @sync);
+rocks_class!(TransactionDbHandle, ffi::rocksdb_transactiondb_t, ffi::rocksdb_transactiondb_close, @send, @sync);
 
-/// The options specific to a TransactionDB transaction
+/// The options specific to a TransactionDb transaction
 ///
 /// TODO: If we need to set any of these options, implement that
 pub struct TransactionOptions {
@@ -82,9 +82,9 @@ impl handle::RocksObjectDefault<ffi::rocksdb_transaction_options_t> for Transact
 }
 
 rocks_db_impl!(
-    TransactionDB,
-    TransactionDBColumnFamily,
-    TransactionDBHandle,
+    TransactionDb,
+    TransactionDbColumnFamily,
+    TransactionDbHandle,
     ffi::rocksdb_transactiondb_t
 );
 
@@ -193,38 +193,38 @@ impl DeadlockPath {
     }
 }
 
-impl crate::error::ErrorPostprocessor for TransactionDB {
+impl crate::error::ErrorPostprocessor for TransactionDb {
     fn postprocess_error(&self, err: Error) -> Error {
         match err {
-            Error::RocksDBError { status, backtrace }
+            Error::RocksDbError { status, backtrace }
                 if status.code == crate::status::Code::Busy
                     && status.subcode == crate::status::SubCode::Deadlock =>
             {
                 // This is a deadlock error which means deadlock detection was enabled which means
                 // there should be a record of recent deadlocks.
-                Error::RocksDBDeadlock {
+                Error::RocksDbDeadlock {
                     deadlock_paths: self.get_deadlocks(),
                     backtrace,
                 }
             }
-            Error::RocksDBError { status, backtrace }
+            Error::RocksDbError { status, backtrace }
                 if status.code == crate::status::Code::TimedOut
                     && status.subcode == crate::status::SubCode::LockTimeout =>
             {
                 // A timeout waiting on a lock.  This happens if deadlocks happen and deadlock
                 // detection is not enabled
-                Error::RocksDBLockTimeout { backtrace }
+                Error::RocksDbLockTimeout { backtrace }
             }
             other => other,
         }
     }
 }
 
-impl TransactionDB {
+impl TransactionDb {
     /// If deadlock detection is enabled, and if at least one deadlock error has occurred, gets the
     /// path info for all recent deadlocks.
     pub fn get_deadlocks(&self) -> Vec<DeadlockPath> {
-        use crate::ops::GetDBPtr;
+        use crate::ops::GetDbPtr;
 
         let mut deadlocks = Vec::new();
         let deadlocks_ptr: *mut Vec<DeadlockPath> = &mut deadlocks;

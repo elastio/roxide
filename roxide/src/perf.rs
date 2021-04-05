@@ -43,7 +43,7 @@ enum RocksDbPerfLevel {
 
     /// Other than time, also measure CPU time counters. Still don't measure
     /// time (neither wall time nor CPU time) for mutexes.
-    EnableTimeAndCPUTimeExceptForMutex = 4,
+    EnableTimeAndCpuTimeExceptForMutex = 4,
 
     /// enable count and time stats
     EnableTime = 5,
@@ -123,7 +123,7 @@ pub struct PerfStats {
 fn set_perf_level(level: PerfLevel) {
     let rocks_level = match level {
         PerfLevel::Minimal => RocksDbPerfLevel::EnableCount,
-        PerfLevel::Full => RocksDbPerfLevel::EnableTimeAndCPUTimeExceptForMutex,
+        PerfLevel::Full => RocksDbPerfLevel::EnableTimeAndCpuTimeExceptForMutex,
     };
 
     unsafe { set_rocks_perf_level(rocks_level, level == PerfLevel::Full) };
@@ -149,16 +149,16 @@ unsafe fn set_rocks_perf_level(rocks_level: RocksDbPerfLevel, per_level_enabled:
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{DBLike, DB};
-    use crate::ops::{Compact, DBOpen, Get};
-    use crate::test::TempDBPath;
+    use crate::db::{Db, DbLike};
+    use crate::ops::{Compact, DbOpen, Get};
+    use crate::test::TempDbPath;
     use crate::Result;
     use more_asserts::*;
 
     #[test]
     fn perf_stats_on_put() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Generate several test records which will be compacted
@@ -211,8 +211,8 @@ mod test {
     /// be a problem.
     #[test]
     fn perf_stats_thread_locality() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let threads = (0u64..num_cpus::get() as u64 * 2)

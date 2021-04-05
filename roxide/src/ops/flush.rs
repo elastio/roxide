@@ -3,7 +3,7 @@
 //! force the database to flush for exampel before persisting to S3.
 use super::op_metrics;
 use super::*;
-use crate::db::{self, DBLike};
+use crate::db::{self, DbLike};
 use crate::ffi;
 use crate::handle::{self, RocksObject, RocksObjectDefault};
 use crate::status;
@@ -101,7 +101,7 @@ pub trait Flush: RocksOpBase {
     /// successfully, or fail
     fn flush_all<O: Into<Option<FlushOptions>>>(&self, options: O) -> Result<()>
     where
-        Self: DBLike,
+        Self: DbLike,
     {
         let cf_names = self.get_cf_names();
         let cfs = cf_names
@@ -118,7 +118,7 @@ pub trait Flush: RocksOpBase {
     }
 }
 
-impl<T: DBLike + GetDBPtr> Flush for T {
+impl<T: DbLike + GetDbPtr> Flush for T {
     fn flush_cfs<CF: db::ColumnFamilyLike, O: Into<Option<FlushOptions>>>(
         &self,
         cfs: &[CF],
@@ -158,13 +158,13 @@ impl<T: DBLike + GetDBPtr> Flush for T {
 mod test {
     use super::*;
     use crate::db::{db::*, opt_txdb::*, txdb::*};
-    use crate::ops::{DBOpen, Put};
-    use crate::test::TempDBPath;
+    use crate::ops::{DbOpen, Put};
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_flush() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -177,8 +177,8 @@ mod test {
 
     #[test]
     fn txdb_flush() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -191,8 +191,8 @@ mod test {
 
     #[test]
     fn opt_txdb_flush() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -209,17 +209,17 @@ mod test {
     /// I'm seeing behavior that makes me doubt that and I want to be reassured.
     #[test]
     fn flush_not_required_before_close() -> Result<()> {
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
 
         {
-            let db = DB::open(&path, None)?;
+            let db = Db::open(&path, None)?;
             let cf = db.get_cf("default").unwrap();
 
             db.put(&cf, "foo", "bar", None)?;
         }
 
         // `db` and `cf` went out of scope do the database was closed
-        let db = DB::open(&path, None)?;
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 

@@ -50,12 +50,12 @@ pub(crate) const SMALL_BUFFER_SIZE: usize = 128;
 /// Normal usage would be to utilize the fact it implements `Deref<[u8]>` and use it as
 /// a slice.
 #[derive(Debug)]
-pub struct DBVector {
+pub struct DbVector {
     base: *mut u8,
     len: usize,
 }
 
-impl Deref for DBVector {
+impl Deref for DbVector {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
@@ -63,14 +63,14 @@ impl Deref for DBVector {
     }
 }
 
-impl AsRef<[u8]> for DBVector {
+impl AsRef<[u8]> for DbVector {
     fn as_ref(&self) -> &[u8] {
         // Implement this via Deref so as not to repeat ourselves
         &*self
     }
 }
 
-impl Drop for DBVector {
+impl Drop for DbVector {
     fn drop(&mut self) {
         unsafe {
             crate::ffi::rocksdb_free(self.base as *mut libc::c_void);
@@ -78,7 +78,7 @@ impl Drop for DBVector {
     }
 }
 
-impl std::cmp::PartialEq for DBVector {
+impl std::cmp::PartialEq for DbVector {
     fn eq(&self, rhs: &Self) -> bool {
         self.as_ref() == rhs.as_ref()
     }
@@ -86,9 +86,9 @@ impl std::cmp::PartialEq for DBVector {
 
 /// `DBVector` has no thread afinity, although it's not thread-safe so it can only be accessed from
 /// one thread at once
-unsafe impl Send for DBVector {}
+unsafe impl Send for DbVector {}
 
-impl DBVector {
+impl DbVector {
     /// Used internally to create a DBVector from a `C` memory block
     ///
     /// # Unsafe
@@ -108,8 +108,8 @@ impl DBVector {
     ///
     /// Never call this function; it's intended for internal use by the `roxide`
     /// implementation.
-    pub unsafe fn from_c(val: *mut u8, val_len: libc::size_t) -> DBVector {
-        DBVector {
+    pub unsafe fn from_c(val: *mut u8, val_len: libc::size_t) -> DbVector {
+        DbVector {
             base: val,
             len: val_len as usize,
         }
@@ -131,16 +131,16 @@ impl DBVector {
 /// `PinnableSlice` and expose its contents directly, however that has a lot of implementation
 /// challenges that would require in much more complex and unsafe code, particularly given that
 /// this is intended for use with C++ arrays of `PinnableSlice` which means we'd have to put an
-/// `Arc` around the array itself and `clone()` it for each instance of `DBPinnableSlice`.
+/// `Arc` around the array itself and `clone()` it for each instance of `DbPinnableSlice`.
 ///
 /// Without having done any benchmarks we can't say for sure that all of that overhead is not worth
 /// it from a performance perspective, but it seems likely to be of limited value.
 #[derive(Debug)]
-pub struct DBPinnableSlice {
+pub struct DbPinnableSlice {
     data: smallvec::SmallVec<[u8; SMALL_BUFFER_SIZE]>,
 }
 
-impl Deref for DBPinnableSlice {
+impl Deref for DbPinnableSlice {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
@@ -148,26 +148,26 @@ impl Deref for DBPinnableSlice {
     }
 }
 
-impl AsRef<[u8]> for DBPinnableSlice {
+impl AsRef<[u8]> for DbPinnableSlice {
     fn as_ref(&self) -> &[u8] {
         // Implement this via Deref so as not to repeat ourselves
         self.data.as_slice()
     }
 }
 
-impl std::cmp::PartialEq for DBPinnableSlice {
+impl std::cmp::PartialEq for DbPinnableSlice {
     fn eq(&self, rhs: &Self) -> bool {
         self.as_ref() == rhs.as_ref()
     }
 }
 
-impl DBPinnableSlice {
+impl DbPinnableSlice {
     /// Convenience function to attempt to reinterperet value as string.
     pub fn to_string_lossy(&self) -> Cow<str> {
         String::from_utf8_lossy(self.as_ref())
     }
 
-    /// Create a new `DBPinnableSlice` instance from a pointer to a `rocksdb::PinnableSlice`.
+    /// Create a new `DbPinnableSlice` instance from a pointer to a `rocksdb::PinnableSlice`.
     ///
     /// # Safety
     ///
@@ -190,8 +190,8 @@ impl DBPinnableSlice {
         Self { data }
     }
 
-    /// From a `std::vector` of `rocksdb::PinnableSlice`, construct a `Vec<DBPinnableSlice>`,
-    /// copying the contents of each slice into a `DBPinnableSlice`
+    /// From a `std::vector` of `rocksdb::PinnableSlice`, construct a `Vec<DbPinnableSlice>`,
+    /// copying the contents of each slice into a `DbPinnableSlice`
     ///
     /// # Safety
     ///
@@ -217,9 +217,9 @@ impl DBPinnableSlice {
                 for (auto& rocksdb_slice : *stl_vector) {
                     rocksdb::PinnableSlice* slice_ptr = &rocksdb_slice;
 
-                    rust!(MEMRocksSliceToRustSlice [rust_vec_ptr: *mut Vec<DBPinnableSlice> as "void*", slice_ptr: *const std::ffi::c_void as "rocksdb::PinnableSlice*"] {
+                    rust!(MEMRocksSliceToRustSlice [rust_vec_ptr: *mut Vec<DbPinnableSlice> as "void*", slice_ptr: *const std::ffi::c_void as "rocksdb::PinnableSlice*"] {
                         unsafe {
-                            (*rust_vec_ptr).push(DBPinnableSlice::from_rocks_pinnable_slice(slice_ptr));
+                            (*rust_vec_ptr).push(DbPinnableSlice::from_rocks_pinnable_slice(slice_ptr));
                         }
                     });
                 }
@@ -236,7 +236,7 @@ mod tests {
     fn pinnable_slice_round_trip() {
         unsafe {
             // Create a C++ vector of pinnable slices with some test data, then construct a vector of
-            // DBPinnableSlice from that
+            // DbPinnableSlice from that
             let stl_vector_ptr = cpp!([] -> *mut std::ffi::c_void as "std::vector<rocksdb::PinnableSlice>*" {
                 auto stl_vector = new std::vector<rocksdb::PinnableSlice>();
 
@@ -254,7 +254,7 @@ mod tests {
             });
 
             let mut vec = Vec::new();
-            DBPinnableSlice::extend_vec_from_pinnable_slices(&mut vec, stl_vector_ptr);
+            DbPinnableSlice::extend_vec_from_pinnable_slices(&mut vec, stl_vector_ptr);
 
             let refs = vec.iter().map(|slice| slice.as_ref()).collect::<Vec<_>>();
 

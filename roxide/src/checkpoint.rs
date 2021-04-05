@@ -38,7 +38,7 @@ impl Checkpoint {
     /// operation.
     ///
     /// What `new` does here is the actual creation of the snapshot on disk.
-    pub(crate) fn new<DB: db::DBLike>(
+    pub(crate) fn new<DB: db::DbLike>(
         db: &DB,
         path: impl Into<path::PathBuf>,
         checkpoint: impl Into<CheckpointHandle>,
@@ -82,21 +82,21 @@ mod test {
     #![allow(clippy::blacklisted_name)]
     use super::*;
     use crate::ops::{
-        Compact, CreateCheckpoint, DBOpen, DBOpenReadOnly, Flush, Get, GetLatestSequenceNumber,
+        Compact, CreateCheckpoint, DbOpen, DbOpenReadOnly, Flush, Get, GetLatestSequenceNumber,
         GetLiveFiles, Put, SstFile,
     };
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
     use crate::{
-        db::{db::DB, DBLike},
-        DBOptions,
+        db::{db::Db, DbLike},
+        DbOptions,
     };
     use glob::glob;
     use walkdir::WalkDir;
 
     #[test]
     fn create_checkpoint() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -110,8 +110,8 @@ mod test {
     fn checkpoint_is_openable() -> Result<()> {
         // A checkpoint should be usable as a database by itself, but contain the same data as the
         // database it came from.
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write some test data to the database before the checkpoint
@@ -125,7 +125,7 @@ mod test {
         // Open the checkpoint as if it were a database
         // `false` means the open should not fail if there is a WAL.  Even though `checkpoint`
         // flushes the log, it seems in practice a log file still exists in the checkpoint dir
-        let check_db = DB::open_readonly(checkpoint.path(), None, false)?;
+        let check_db = Db::open_readonly(checkpoint.path(), None, false)?;
 
         // The value before the checkpoint should be returned
         assert_eq!(
@@ -141,17 +141,17 @@ mod test {
     fn checkpoint_with_custom_cf_paths_is_openable() -> Result<()> {
         // Override the column family data paths with per-CF paths, and see how that effects the
         // structure of the checkpoint.
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
         let foo_path = path.path().join("foo");
         let bar_path = path.path().join("bar");
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
 
         options.add_column_family("foo");
         options.set_column_family_path("foo", &foo_path);
         options.add_column_family("bar");
         options.set_column_family_path("bar", &bar_path);
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         // Write some test data to the database before the checkpoint
         let cf = db.get_cf("foo").unwrap();
         crate::test::fill_db(&db, &cf, 10_000)?;
@@ -162,7 +162,7 @@ mod test {
         let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
 
         // Open the checkpoint as if it were a database
-        let _check_db = DB::open_readonly(checkpoint.path(), None, false)?;
+        let _check_db = Db::open_readonly(checkpoint.path(), None, false)?;
 
         // Print out the directory structure for debugging purposes
         for entry in WalkDir::new(path.path()) {
@@ -184,11 +184,11 @@ mod test {
     fn checkpoint_contains_only_live_files() -> Result<()> {
         // A checkpoint should be usable as a database by itself, but contain the same data as the
         // database it came from.
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("foo");
         options.add_column_family("bar");
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let foo = db.get_cf("foo").unwrap();
         let bar = db.get_cf("bar").unwrap();
 
@@ -214,7 +214,7 @@ mod test {
 
         let seq_num = db.get_latest_sequence_number();
 
-        let checkpoint_path = TempDBPath::new();
+        let checkpoint_path = TempDbPath::new();
         // We don't want this directory to already exist
         std::fs::remove_dir_all(checkpoint_path.path()).unwrap();
 
@@ -237,10 +237,10 @@ mod test {
         dump_live_files(db.get_live_files()?.as_slice());
 
         // Open the checkpoint as if it were a database
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family("foo");
         options.add_column_family("bar");
-        let check_db = DB::open_readonly(checkpoint.path(), options, false)?;
+        let check_db = Db::open_readonly(checkpoint.path(), options, false)?;
 
         assert_eq!(seq_num, check_db.get_latest_sequence_number());
 

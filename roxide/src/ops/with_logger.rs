@@ -3,7 +3,7 @@
 //! `RocksDbLogger` impl and update its context so log events can more easily be identified by the
 //! database and CF they pertain to.
 use crate::logging::RocksDbLogger;
-use crate::ops::GetDBPtr;
+use crate::ops::GetDbPtr;
 
 pub(crate) trait WithLogger {
     /// If the object is associated with a C++ RocksDB logger which wraps a Rust implementation in
@@ -17,7 +17,7 @@ pub(crate) trait WithLogger {
         F: std::panic::UnwindSafe;
 }
 
-impl<DB: GetDBPtr> WithLogger for DB {
+impl<DB: GetDbPtr> WithLogger for DB {
     fn with_logger<R, F: FnOnce(Option<&Box<dyn RocksDbLogger + 'static>>) -> R>(
         &self,
         func: F,
@@ -25,7 +25,7 @@ impl<DB: GetDBPtr> WithLogger for DB {
     where
         F: std::panic::UnwindSafe,
     {
-        let db_ptr = <Self as crate::ops::GetDBPtr>::get_db_ptr(self);
+        let db_ptr = <Self as crate::ops::GetDbPtr>::get_db_ptr(self);
 
         unsafe { crate::logging::temp_logger_from_raw_db_ptr(db_ptr, func) }
     }
@@ -34,11 +34,11 @@ impl<DB: GetDBPtr> WithLogger for DB {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::DB;
-    use crate::db_options::DBOptions;
+    use crate::db::Db;
+    use crate::db_options::DbOptions;
     use crate::logging::tests::TestLogger;
-    use crate::ops::DBOpen;
-    use crate::test::TempDBPath;
+    use crate::ops::DbOpen;
+    use crate::test::TempDbPath;
     use crate::Result;
 
     #[test]
@@ -46,11 +46,11 @@ mod tests {
         let mut logger = TestLogger::new();
         logger.include_json = true;
 
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
-        let path = TempDBPath::new();
-        let db = DB::open(&path, options)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, options)?;
 
         // The same messages entry should be present now.
         #[allow(clippy::borrowed_box)]

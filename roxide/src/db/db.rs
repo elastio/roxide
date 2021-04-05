@@ -3,13 +3,13 @@
 use super::*;
 use crate::rocks_class;
 
-rocks_class!(DBHandle, ffi::rocksdb_t, ffi::rocksdb_close, @send, @sync);
-rocks_db_impl!(DB, DBColumnFamily, DBHandle, ffi::rocksdb_t);
+rocks_class!(DbHandle, ffi::rocksdb_t, ffi::rocksdb_close, @send, @sync);
+rocks_db_impl!(Db, DbColumnFamily, DbHandle, ffi::rocksdb_t);
 
-impl DB {
+impl Db {
     /// Destroys the database at the specified path, including any files used by that database that
     /// happen to be in another directory
-    pub fn destroy<O: Into<Option<DBOptions>>, P: AsRef<Path>>(
+    pub fn destroy<O: Into<Option<DbOptions>>, P: AsRef<Path>>(
         db_options: O,
         path: P,
     ) -> Result<()> {
@@ -44,25 +44,25 @@ impl DB {
 }
 
 // There are no errors that need to be post-processed for this DB type
-impl crate::error::ErrorPostprocessor for DB {}
+impl crate::error::ErrorPostprocessor for Db {}
 
 #[cfg(test)]
 
 mod test {
     use super::*;
-    use crate::ops::{Compact, DBOpen};
-    use crate::test::TempDBPath;
+    use crate::ops::{Compact, DbOpen};
+    use crate::test::TempDbPath;
 
     #[test]
     fn dangling_column_family() -> Result<()> {
         // Make a database with a few column families.  Then drop everything but one remaining
         // column family handle.  It should still work.
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("boo");
         options.add_column_family("bar");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         let boo = db.get_cf("boo").unwrap();
         let bar = db.get_cf("bar").unwrap();
@@ -78,12 +78,12 @@ mod test {
 
     #[test]
     fn cf_name_correct() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("boo");
         options.add_column_family("bar");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         let boo = db.get_cf("boo").unwrap();
         assert_eq!("boo", boo.name().as_str());
@@ -96,11 +96,11 @@ mod test {
 
     #[test]
     fn no_extra_cfs() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("bar");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         assert_eq!(
             &vec!["default", "bar"].sort_unstable(),
@@ -114,22 +114,22 @@ mod test {
     #[should_panic]
     fn cant_open_more_than_once() {
         // It's not possible to open the same database twice; each open is exclusive
-        let path = TempDBPath::new();
-        let _db1 = DB::create_new(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let _db1 = Db::create_new(&path, None).unwrap();
 
-        DB::open_existing(&path, None).unwrap();
+        Db::open_existing(&path, None).unwrap();
     }
 
     #[test]
     fn closes_on_drop() -> Result<()> {
         // Once the database is dropped, the database is closed and another instance can be created
         // It's not possible to open the same database twice; each open is exclusive
-        let path = TempDBPath::new();
-        let db1 = DB::create_new(&path, None)?;
+        let path = TempDbPath::new();
+        let db1 = Db::create_new(&path, None)?;
 
         drop(db1);
 
-        DB::open_existing(&path, None)?;
+        Db::open_existing(&path, None)?;
 
         Ok(())
     }
@@ -139,38 +139,38 @@ mod test {
     fn cant_open_with_cf_alive() {
         // Even if the only thing left is a column family object, the db is still locked
         // It's not possible to open the same database twice; each open is exclusive
-        let path = TempDBPath::new();
-        let db1 = DB::create_new(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db1 = Db::create_new(&path, None).unwrap();
         let _cf = db1.get_cf("default").unwrap();
 
         drop(db1);
 
-        DB::open_existing(&path, None).unwrap();
+        Db::open_existing(&path, None).unwrap();
     }
 
     #[test]
     fn closes_on_cf_drop() -> Result<()> {
         // Dropping the last CF also closes the database
-        let path = TempDBPath::new();
-        let db1 = DB::create_new(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db1 = Db::create_new(&path, None).unwrap();
         let cf = db1.get_cf("default").unwrap();
 
         drop(db1);
         drop(cf);
 
-        DB::open_existing(&path, None)?;
+        Db::open_existing(&path, None)?;
 
         Ok(())
     }
 
     #[test]
     fn gets_cf_names() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("boo");
         options.add_column_family("bar");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         let cf_names = db.get_cf_names();
 
@@ -182,14 +182,14 @@ mod test {
 
     #[test]
     fn setup_database_loggers_works() -> Result<()> {
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
         let logger = crate::logging::tests::TestLogger::new();
         let context = logger.context.clone();
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
-        let db = DB::open(&path, options)?;
-        // crate::db::setup_database_loggers(&db);
+        let db = Db::open(&path, options)?;
+        // crate::Db::setup_database_loggers(&db);
         drop(db);
 
         // Verify the logger's context was set
@@ -207,10 +207,10 @@ mod test {
 
     #[test]
     fn setup_database_loggers_works_without_logger() -> Result<()> {
-        let path = TempDBPath::new();
-        let options = DBOptions::default();
+        let path = TempDbPath::new();
+        let options = DbOptions::default();
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         drop(db);
 
         Ok(())
@@ -219,10 +219,10 @@ mod test {
     /// When we set a db_path in DBOptions, that overrides the path specified in open or create
     #[test]
     fn db_path_overrides_open() -> Result<()> {
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
         let db_path = path.path().join("custom_path");
         std::fs::create_dir_all(&db_path).unwrap();
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family("boo");
         options.add_column_family("bar");
 
@@ -231,7 +231,7 @@ mod test {
 
         // Create the database and put some data in it then close it
         {
-            let db = DB::create_new(&path, options)?;
+            let db = Db::create_new(&path, options)?;
 
             // Put something in the DB so data files will have to be written
             //
@@ -260,14 +260,14 @@ mod test {
     /// specified in open or create
     #[test]
     fn cf_path_overrides_open() -> Result<()> {
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
         let db_path = path.path().join("custom_path");
         let boo_path = db_path.join("boo");
         let bar_path = db_path.join("bar");
         std::fs::create_dir_all(&db_path).unwrap();
         std::fs::create_dir_all(&boo_path).unwrap();
         std::fs::create_dir_all(&bar_path).unwrap();
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family("boo");
         options.add_column_family("bar");
         options.set_db_path(&db_path);
@@ -276,7 +276,7 @@ mod test {
 
         // Create the database and put some data in it then close it
         {
-            let db = DB::create_new(&path, options)?;
+            let db = Db::create_new(&path, options)?;
 
             // Put something in the DB so data files will have to be written
             //

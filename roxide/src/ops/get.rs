@@ -7,7 +7,7 @@ use crate::error;
 use crate::ffi;
 use crate::ffi_util;
 use crate::handle::{RocksObject, RocksObjectDefault};
-use crate::mem::{DBPinnableSlice, DBVector};
+use crate::mem::{DbPinnableSlice, DbVector};
 use crate::status;
 use crate::status::{Code, CppStatus};
 use crate::tx::{sync, unsync};
@@ -40,7 +40,7 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
     cf: NonNull<ffi::rocksdb_column_family_handle_t>,
     keys: impl IntoIterator<Item = K>,
     options: NonNull<ffi::rocksdb_readoptions_t>,
-) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
     // Keed all of the keys in a contiguous vector to use MultiGet
     let keys = keys.into_iter().collect::<Vec<_>>();
     let num_keys = keys.len();
@@ -52,8 +52,8 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
         ffi_util::rust_slices_to_rocks_slices(keys.iter().map(|binary_str| binary_str.as_slice()));
 
     // prepare Rust vecs to hold the values retrieved and the status codes for each key
-    let mut values = Vec::<DBPinnableSlice>::with_capacity(num_keys);
-    let rust_values_ptr: *mut Vec<DBPinnableSlice> = &mut values;
+    let mut values = Vec::<DbPinnableSlice>::with_capacity(num_keys);
+    let rust_values_ptr: *mut Vec<DbPinnableSlice> = &mut values;
     let mut statuses = Vec::<CppStatus>::with_capacity(num_keys);
     let rust_statuses_ptr: *mut Vec<CppStatus> = &mut statuses;
 
@@ -85,7 +85,7 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
 
         // The STL vectors `values` and `statuses` are now populated with key values and
         // `CppStatus` status values, respectively.  Fil the Rust `statuses` Vec accordingly,
-        // and copy the contents of `values` into a new Rust Vec of `DBPinnableSlice`.
+        // and copy the contents of `values` into a new Rust Vec of `DbPinnableSlice`.
         auto cpp_statuses_ptr = statuses.data();
         rust!(DBMultiGet_copy_statuses [
             num_keys: usize as "size_t",
@@ -101,11 +101,11 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
         auto cpp_values_ptr = &values;
 
         rust!(DBMultiGet_copy_values [
-            rust_values_ptr: *mut Vec<DBPinnableSlice> as "void*",
+            rust_values_ptr: *mut Vec<DbPinnableSlice> as "void*",
             cpp_values_ptr: *mut std::ffi::c_void as "std::vector<rocksdb::PinnableSlice>*"
         ] {
                 unsafe {
-                    DBPinnableSlice::extend_vec_from_pinnable_slices(&mut (*rust_values_ptr), cpp_values_ptr);
+                    DbPinnableSlice::extend_vec_from_pinnable_slices(&mut (*rust_values_ptr), cpp_values_ptr);
                 }
             }
         );
@@ -118,7 +118,7 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
     debug_assert_eq!(values.len(), statuses.len());
     debug_assert_eq!(values.len(), keys.len());
 
-    let results: Result<Vec<(K, Option<DBPinnableSlice>)>> = keys
+    let results: Result<Vec<(K, Option<DbPinnableSlice>)>> = keys
         .into_iter()
         .zip(values.into_iter())
         .zip(statuses.into_iter())
@@ -131,7 +131,7 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
             } else if status.code() == Code::NotFound {
                 Ok((key, None))
             } else {
-                error::RocksDBError { status }.fail()
+                error::RocksDbError { status }.fail()
             }
         })
         .collect();
@@ -152,7 +152,7 @@ pub trait Get: RocksOpBase {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>>;
+    ) -> Result<Option<DbVector>>;
 
     /// Raw version of `multi_get`, operating on unsafe C bindings.  Not intended for use by external
     /// crates.
@@ -166,7 +166,7 @@ pub trait Get: RocksOpBase {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         keys: impl IntoIterator<Item = K>,
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>>;
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>>;
 
     /// Gets the value for `key` in `cf`, returning a Rocks-allocated buffer containing the value
     /// if found, or `None` if not found.
@@ -175,7 +175,7 @@ pub trait Get: RocksOpBase {
         cf: &impl db::ColumnFamilyLike,
         key: impl BinaryStr,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         op_metrics::instrument_cf_op(
             cf,
             op_metrics::ColumnFamilyOperation::Get,
@@ -207,7 +207,7 @@ pub trait Get: RocksOpBase {
         cf: &CF,
         keys: impl IntoIterator<Item = K>,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         op_metrics::instrument_cf_op(
             cf,
             op_metrics::ColumnFamilyOperation::MultiGet,
@@ -231,7 +231,7 @@ pub trait Get: RocksOpBase {
         cf: &CF,
         keys: impl IntoIterator<Item = K> + Send + 'static,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DBPinnableSlice>)>>
+    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DbPinnableSlice>)>>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -264,7 +264,7 @@ pub trait Get: RocksOpBase {
         cf: &CF,
         key: K,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<(K, Option<DBVector>)>
+    ) -> op_metrics::AsyncOpFuture<(K, Option<DbVector>)>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -311,7 +311,7 @@ pub trait GetForUpdate: RocksOpBase {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>>;
+    ) -> Result<Option<DbVector>>;
 
     /// Gets the value for `key` in `cf`, returning a Rocks-allocated buffer containing the value
     /// if found, or `None` if not found.
@@ -320,7 +320,7 @@ pub trait GetForUpdate: RocksOpBase {
         cf: &impl db::ColumnFamilyLike,
         key: impl BinaryStr,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         op_metrics::instrument_cf_op(
             cf,
             op_metrics::ColumnFamilyOperation::GetForUpdate,
@@ -352,7 +352,7 @@ pub trait GetForUpdate: RocksOpBase {
         cf: &CF,
         keys: impl IntoIterator<Item = K>,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Vec<(K, Option<DBVector>)>> {
+    ) -> Result<Vec<(K, Option<DbVector>)>> {
         op_metrics::instrument_cf_op(
             cf,
             op_metrics::ColumnFamilyOperation::MultiGetForUpdate,
@@ -386,7 +386,7 @@ pub trait GetForUpdate: RocksOpBase {
         cf: &CF,
         keys: impl IntoIterator<Item = K> + Send + 'static,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DBVector>)>>
+    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DbVector>)>>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -414,7 +414,7 @@ pub trait GetForUpdate: RocksOpBase {
 
                     // Contort ourselves a bit to pull out the per-item `Result` into one top-level `Result`
                     // which will contain whatever the first error was if any
-                    let results: Result<Vec<(K, Option<DBVector>)>> = results.collect();
+                    let results: Result<Vec<(K, Option<DbVector>)>> = results.collect();
 
                     results
                 })
@@ -431,7 +431,7 @@ pub trait GetForUpdate: RocksOpBase {
         cf: &CF,
         key: K,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<(K, Option<DBVector>)>
+    ) -> op_metrics::AsyncOpFuture<(K, Option<DbVector>)>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -462,13 +462,13 @@ pub trait GetForUpdate: RocksOpBase {
     }
 }
 
-impl Get for DB {
+impl Get for Db {
     unsafe fn raw_get(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         let mut val_len: libc::size_t = 0;
         let val_ptr = ffi_try!(ffi::rocksdb_get_cf(
             handle.rocks_ptr().as_ptr(),
@@ -480,7 +480,7 @@ impl Get for DB {
         ))?;
 
         if !val_ptr.is_null() {
-            Ok(Some(DBVector::from_c(val_ptr as *mut u8, val_len)))
+            Ok(Some(DbVector::from_c(val_ptr as *mut u8, val_len)))
         } else {
             Ok(None)
         }
@@ -491,19 +491,19 @@ impl Get for DB {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         keys: impl IntoIterator<Item = K>,
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         let cpp_db_ptr = Self::raw_get_db_ptr(handle);
         raw_multi_get_impl(cpp_db_ptr, std::ptr::null_mut(), cf, keys, options)
     }
 }
 
-impl Get for TransactionDB {
+impl Get for TransactionDb {
     unsafe fn raw_get(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         let mut val_len: libc::size_t = 0;
         let val_ptr = ffi_try!(ffi::rocksdb_transactiondb_get_cf(
             handle.rocks_ptr().as_ptr(),
@@ -515,7 +515,7 @@ impl Get for TransactionDB {
         ))?;
 
         if !val_ptr.is_null() {
-            Ok(Some(DBVector::from_c(val_ptr as *mut u8, val_len)))
+            Ok(Some(DbVector::from_c(val_ptr as *mut u8, val_len)))
         } else {
             Ok(None)
         }
@@ -526,19 +526,19 @@ impl Get for TransactionDB {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         keys: impl IntoIterator<Item = K>,
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         let cpp_db_ptr = Self::raw_get_db_ptr(handle);
         raw_multi_get_impl(cpp_db_ptr, std::ptr::null_mut(), cf, keys, options)
     }
 }
 
-impl Get for OptimisticTransactionDB {
+impl Get for OptimisticTransactionDb {
     unsafe fn raw_get(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         // The optimistic transaction DB API is slightly different than either of the others.
         // See the comment in `put.rs` for the details
         Self::with_base_db(handle, |base_db| {
@@ -553,7 +553,7 @@ impl Get for OptimisticTransactionDB {
             ))?;
 
             if !val_ptr.is_null() {
-                Ok(Some(DBVector::from_c(val_ptr as *mut u8, val_len)))
+                Ok(Some(DbVector::from_c(val_ptr as *mut u8, val_len)))
             } else {
                 Ok(None)
             }
@@ -565,7 +565,7 @@ impl Get for OptimisticTransactionDB {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         keys: impl IntoIterator<Item = K>,
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         let cpp_db_ptr = Self::raw_get_db_ptr(handle);
         raw_multi_get_impl(cpp_db_ptr, std::ptr::null_mut(), cf, keys, options)
     }
@@ -577,7 +577,7 @@ impl Get for unsync::Transaction {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         let mut val_len: libc::size_t = 0;
         let val_ptr = ffi_try!(ffi::rocksdb_transaction_get_cf(
             handle.rocks_ptr().as_ptr(),
@@ -589,7 +589,7 @@ impl Get for unsync::Transaction {
         ))?;
 
         if !val_ptr.is_null() {
-            Ok(Some(DBVector::from_c(val_ptr as *mut u8, val_len)))
+            Ok(Some(DbVector::from_c(val_ptr as *mut u8, val_len)))
         } else {
             Ok(None)
         }
@@ -600,7 +600,7 @@ impl Get for unsync::Transaction {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         keys: impl IntoIterator<Item = K>,
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         raw_multi_get_impl(
             std::ptr::null_mut(),
             handle.rocks_ptr().as_ptr(),
@@ -617,7 +617,7 @@ impl GetForUpdate for unsync::Transaction {
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         key: &[u8],
         options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         let mut val_len: libc::size_t = 0;
         let mut val_ptr: *mut libc::c_char = std::ptr::null_mut();
 
@@ -634,7 +634,7 @@ impl GetForUpdate for unsync::Transaction {
 
         if status.is_ok() {
             // Operation succeeded and value was found
-            Ok(Some(DBVector::from_c(val_ptr as *mut u8, val_len)))
+            Ok(Some(DbVector::from_c(val_ptr as *mut u8, val_len)))
         } else if status.code() == status::Code::NotFound {
             // Operation failed but only because the value was not found
             Ok(None)
@@ -654,7 +654,7 @@ impl Get for sync::Transaction {
         _cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         _key: &[u8],
         _options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         unreachable!()
     }
 
@@ -663,7 +663,7 @@ impl Get for sync::Transaction {
         _cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         _keys: impl IntoIterator<Item = K>,
         _options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         unreachable!()
     }
 
@@ -672,7 +672,7 @@ impl Get for sync::Transaction {
         cf: &impl db::ColumnFamilyLike,
         key: impl BinaryStr,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         self.with_tx(move |tx| tx.get(cf, key, options))
     }
 
@@ -681,7 +681,7 @@ impl Get for sync::Transaction {
         cf: &CF,
         keys: impl IntoIterator<Item = K>,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Vec<(K, Option<DBPinnableSlice>)>> {
+    ) -> Result<Vec<(K, Option<DbPinnableSlice>)>> {
         self.with_tx(move |tx| tx.multi_get(cf, keys, options))
     }
 
@@ -692,7 +692,7 @@ impl Get for sync::Transaction {
         cf: &CF,
         keys: impl IntoIterator<Item = K> + Send + 'static,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DBPinnableSlice>)>>
+    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DbPinnableSlice>)>>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -714,7 +714,7 @@ impl Get for sync::Transaction {
         cf: &CF,
         key: K,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<(K, Option<DBVector>)>
+    ) -> op_metrics::AsyncOpFuture<(K, Option<DbVector>)>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -745,7 +745,7 @@ impl GetForUpdate for sync::Transaction {
         _cf: NonNull<ffi::rocksdb_column_family_handle_t>,
         _key: &[u8],
         _options: NonNull<ffi::rocksdb_readoptions_t>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         unreachable!()
     }
 
@@ -756,7 +756,7 @@ impl GetForUpdate for sync::Transaction {
         cf: &impl db::ColumnFamilyLike,
         key: impl BinaryStr,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Option<DBVector>> {
+    ) -> Result<Option<DbVector>> {
         self.with_tx(move |tx| tx.get_for_update(cf, key, options))
     }
 
@@ -771,7 +771,7 @@ impl GetForUpdate for sync::Transaction {
         cf: &CF,
         keys: impl IntoIterator<Item = K>,
         options: impl Into<Option<ReadOptions>>,
-    ) -> Result<Vec<(K, Option<DBVector>)>> {
+    ) -> Result<Vec<(K, Option<DbVector>)>> {
         self.with_tx(move |tx| tx.multi_get_for_update(cf, keys, options))
     }
 
@@ -780,7 +780,7 @@ impl GetForUpdate for sync::Transaction {
         cf: &CF,
         keys: impl IntoIterator<Item = K> + Send + 'static,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DBVector>)>>
+    ) -> op_metrics::AsyncOpFuture<Vec<(K, Option<DbVector>)>>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -804,7 +804,7 @@ impl GetForUpdate for sync::Transaction {
         cf: &CF,
         key: K,
         options: impl Into<Option<ReadOptions>>,
-    ) -> op_metrics::AsyncOpFuture<(K, Option<DBVector>)>
+    ) -> op_metrics::AsyncOpFuture<(K, Option<DbVector>)>
     where
         <Self as RocksOpBase>::HandleType: Sync + Send,
     {
@@ -833,15 +833,15 @@ impl GetForUpdate for sync::Transaction {
 mod test {
     use super::super::put::Put;
     use super::*;
-    use crate::db::DBLike;
+    use crate::db::DbLike;
     use crate::error;
     use crate::ops::begin_tx::BeginTrans;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_simple_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
@@ -853,8 +853,8 @@ mod test {
 
     #[test]
     fn txdb_simple_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
@@ -866,8 +866,8 @@ mod test {
 
     #[test]
     fn opt_txdb_simple_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
@@ -879,8 +879,8 @@ mod test {
 
     #[test]
     fn tx_simple_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -893,8 +893,8 @@ mod test {
 
     #[test]
     fn sync_tx_simple_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?.into_sync();
@@ -907,8 +907,8 @@ mod test {
 
     #[test]
     fn db_simple_multi_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let keys: Vec<_> = (0..1000).map(|n| format!("key{}", n)).collect();
@@ -948,8 +948,8 @@ mod test {
 
     #[test]
     fn tx_simple_multi_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -1007,8 +1007,8 @@ mod test {
         // Deliberately cause a conflict using `GetForUpdate` with a `TransactionDB`
         // `TransactionDB` uses pessimistic locking, so the conflict is reported on the conflicting
         // `get_for_update` call.
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write all keys to the database
@@ -1032,7 +1032,7 @@ mod test {
         // `get_for_update` call in tx1.  `tx2` will time out waiting to acquire the lock on this
         // key.
         match value2 {
-            Err(error::Error::RocksDBLockTimeout { .. }) => {
+            Err(error::Error::RocksDbLockTimeout { .. }) => {
                 // Expected result
                 Ok(())
             }
@@ -1049,8 +1049,8 @@ mod test {
         // Deliberately cause a conflict using `GetForUpdate` with a `TransactionDB`
         // `TransactionDB` uses pessimistic locking, so the conflict is reported on the conflicting
         // `get_for_update` call.
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write all keys to the database
@@ -1074,7 +1074,7 @@ mod test {
         // `get_for_update` call in tx1.  `tx2` will time out waiting to acquire the lock on this
         // key.
         match value2 {
-            Err(error::Error::RocksDBLockTimeout { .. }) => {
+            Err(error::Error::RocksDbLockTimeout { .. }) => {
                 // Expected result
                 Ok(())
             }
@@ -1086,11 +1086,11 @@ mod test {
 
     #[test]
     fn opt_txdb_get_for_update_conflict() -> Result<()> {
-        // Deliberately cause a conflict using `GetForUpdate` with a `OptimisticTransactionDB`
-        // `OptimisticTransactionDB` uses optimistic locking, so the conflict is reported on the conflicting
+        // Deliberately cause a conflict using `GetForUpdate` with a `OptimisticTransactionDb`
+        // `OptimisticTransactionDb` uses optimistic locking, so the conflict is reported on the conflicting
         // `commit` call.
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write all keys to the database
@@ -1119,7 +1119,7 @@ mod test {
         let result = tx2.commit();
 
         match result {
-            Err(error::Error::RocksDBConflict { .. }) => {
+            Err(error::Error::RocksDbConflict { .. }) => {
                 // Expected result
                 Ok(())
             }
@@ -1131,8 +1131,8 @@ mod test {
 
     #[tokio::test]
     async fn db_async_get() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let keys: Vec<_> = (0..1000).map(|n| format!("key{}", n)).collect();
@@ -1168,8 +1168,8 @@ mod test {
 
     #[tokio::test]
     async fn tx_async_get_scalar() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
         let tx = db.async_begin_trans(None, None).await?;
 

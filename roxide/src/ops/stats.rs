@@ -3,9 +3,9 @@
 //! provides the bridge to get a `rocksdb::Statistics*` for a given database instance.
 
 use super::*;
-use crate::db::DBLike;
-use crate::ops::get_db_ptr::GetDBPtr;
-use crate::stats::DBStatistics;
+use crate::db::DbLike;
+use crate::ops::get_db_ptr::GetDbPtr;
+use crate::stats::DbStatistics;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +65,7 @@ impl StatsLevel {
 }
 
 pub trait Stats: RocksOpBase {
-    fn get_db_stats(&self) -> Option<DBStatistics>;
+    fn get_db_stats(&self) -> Option<DbStatistics>;
 
     fn set_db_stats_level(&mut self, level: StatsLevel) -> Result<()>;
 }
@@ -77,7 +77,7 @@ trait GetStatsPtr {
 
 impl<DB> GetStatsPtr for DB
 where
-    DB: GetDBPtr,
+    DB: GetDbPtr,
 {
     unsafe fn get_stats_ptr(&self) -> Option<*mut libc::c_void> {
         let db_ptr = self.get_db_ptr();
@@ -106,12 +106,12 @@ where
 
 impl<DB> Stats for DB
 where
-    DB: GetDBPtr + DBLike,
+    DB: GetDbPtr + DbLike,
 {
-    fn get_db_stats(&self) -> Option<DBStatistics> {
+    fn get_db_stats(&self) -> Option<DbStatistics> {
         unsafe {
             self.get_stats_ptr()
-                .map(|stats_ptr| DBStatistics::from_rocks_stats_ptr(stats_ptr))
+                .map(|stats_ptr| DbStatistics::from_rocks_stats_ptr(stats_ptr))
         }
     }
 
@@ -140,7 +140,7 @@ where
                     if level == StatsLevel::Disabled {
                         Ok(())
                     } else {
-                        Err(Error::DBStatsDisabledError)
+                        Err(Error::DbStatsDisabledError)
                     }
                 }
             }
@@ -151,20 +151,20 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{db::*, DBLike};
-    use crate::db_options::DBOptions;
-    use crate::ops::DBOpen;
+    use crate::db::{db::*, DbLike};
+    use crate::db_options::DbOptions;
+    use crate::ops::DbOpen;
     use crate::stats;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
     use crate::Result;
     use more_asserts::*;
 
     #[test]
     fn db_get_stats_enabled() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Full);
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         let stats = db.get_db_stats().unwrap();
 
@@ -203,10 +203,10 @@ mod test {
     fn stats_sanity_check_histos() -> Result<()> {
         // I'm seeing what looks like invalid data in some of the histograms.
         // This test sanity-checks that data.
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Full);
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         let stats = db.get_db_stats().unwrap();
@@ -278,9 +278,9 @@ mod test {
 
     #[test]
     fn db_get_stats_disabled() -> Result<()> {
-        let path = TempDBPath::new();
-        let options = DBOptions::default();
-        let db = DB::open(&path, options)?;
+        let path = TempDbPath::new();
+        let options = DbOptions::default();
+        let db = Db::open(&path, options)?;
 
         let stats = db.get_db_stats();
 

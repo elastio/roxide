@@ -87,7 +87,7 @@ pub(crate) fn path_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
     path.as_ref()
         .to_str()
         .map(|s| s.to_owned())
-        .ok_or_else(|| Error::PathNotValidUTF8 {
+        .ok_or_else(|| Error::PathNotValidUtf8 {
             path: path.as_ref().to_owned(),
         })
 }

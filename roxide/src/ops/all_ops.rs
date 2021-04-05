@@ -10,12 +10,12 @@ use super::{
     delete::Delete,
     flush::Flush,
     get::Get,
-    get_db_id::GetDBId,
-    get_db_ptr::GetDBPtr,
+    get_db_id::GetDbId,
+    get_db_ptr::GetDbPtr,
     get_prop::*,
     iterate::IterateAll,
     merge::Merge,
-    open::{DBOpen, DBOpenReadOnly},
+    open::{DbOpen, DbOpenReadOnly},
     put::Put,
     stats::*,
     write::Write,
@@ -36,8 +36,8 @@ pub trait DataWriteOps: Delete + Merge + Put {}
 pub trait DataOps: DataReadOps + DataWriteOps {}
 
 /// Trait which aggregates operations available on a read-only database.
-pub trait ReadOnlyDBOps:
-    DataReadOps + GetDBPtr + GetDBId + GetProperty + DBOpenReadOnly + Stats
+pub trait ReadOnlyDbOps:
+    DataReadOps + GetDbPtr + GetDbId + GetProperty + DbOpenReadOnly + Stats
 {
 }
 
@@ -48,32 +48,32 @@ pub trait ReadOnlyDBOps:
 /// this is not the case.  The transaction-oriented database types actually do not suppport the
 /// `DBOpenRead` operation.  Thus `ReadOnlyDBOps` and `DBOps` are separate traits, unrelated by
 /// inheritance although obviously overlapping considerably
-pub trait DBOps:
+pub trait DbOps:
     DataOps
-    + GetDBPtr
-    + GetDBId
+    + GetDbPtr
+    + GetDbId
     + GetProperty
     + Stats
     + CreateCheckpoint
     + Compact
     + Flush
-    + DBOpen
+    + DbOpen
     + Write
 {
 }
 
 /// Trait which adds `BeginTrans` in addition to all operations exposed in the `DBOps` trait.
-pub trait TransactionDBOps: DBOps + BeginTrans + Sync + Send
+pub trait TransactionDbOps: DbOps + BeginTrans + Sync + Send
 where
     <Self as RocksOpBase>::HandleType: Send,
 {
 }
 
-impl DataReadOps for DB {}
-impl DataWriteOps for DB {}
-impl DataOps for DB {}
-impl ReadOnlyDBOps for DB {}
-impl DBOps for DB {}
+impl DataReadOps for Db {}
+impl DataWriteOps for Db {}
+impl DataOps for Db {}
+impl ReadOnlyDbOps for Db {}
+impl DbOps for Db {}
 
 impl DataReadOps for sync::Transaction {}
 impl DataReadOps for unsync::Transaction {}
@@ -82,14 +82,14 @@ impl DataWriteOps for unsync::Transaction {}
 impl DataOps for sync::Transaction {}
 impl DataOps for unsync::Transaction {}
 
-impl DataReadOps for TransactionDB {}
-impl DataWriteOps for TransactionDB {}
-impl DataOps for TransactionDB {}
-impl DBOps for TransactionDB {}
-impl TransactionDBOps for TransactionDB {}
+impl DataReadOps for TransactionDb {}
+impl DataWriteOps for TransactionDb {}
+impl DataOps for TransactionDb {}
+impl DbOps for TransactionDb {}
+impl TransactionDbOps for TransactionDb {}
 
-impl DataReadOps for OptimisticTransactionDB {}
-impl DataWriteOps for OptimisticTransactionDB {}
-impl DataOps for OptimisticTransactionDB {}
-impl DBOps for OptimisticTransactionDB {}
-impl TransactionDBOps for OptimisticTransactionDB {}
+impl DataReadOps for OptimisticTransactionDb {}
+impl DataWriteOps for OptimisticTransactionDb {}
+impl DataOps for OptimisticTransactionDb {}
+impl DbOps for OptimisticTransactionDb {}
+impl TransactionDbOps for OptimisticTransactionDb {}

@@ -1,10 +1,10 @@
-//! This module implements `OptimisticTransactionDB`, which is a variation of `DB` which provides
-//! the same transaction semantics as `TransactionDB`, except using an optimistic locking strategy.
+//! This module implements `OptimisticTransactionDb`, which is a variation of `DB` which provides
+//! the same transaction semantics as `TransactionDb`, except using an optimistic locking strategy.
 use super::*;
 use crate::rocks_class;
 use once_cell::sync::OnceCell;
 
-rocks_class!(OptimisticTransactionDBHandle, ffi::rocksdb_optimistictransactiondb_t, ffi::rocksdb_optimistictransactiondb_close, @send, @sync);
+rocks_class!(OptimisticTransactionDbHandle, ffi::rocksdb_optimistictransactiondb_t, ffi::rocksdb_optimistictransactiondb_close, @send, @sync);
 
 /// The options specific to a OptimisticTransactionDB transaction
 ///
@@ -63,13 +63,13 @@ impl handle::RocksObjectDefault<ffi::rocksdb_optimistictransaction_options_t>
 }
 
 rocks_db_impl!(
-    OptimisticTransactionDB,
-    OptimisticTransactionDBColumnFamily,
-    OptimisticTransactionDBHandle,
+    OptimisticTransactionDb,
+    OptimisticTransactionDbColumnFamily,
+    OptimisticTransactionDbHandle,
     ffi::rocksdb_optimistictransactiondb_t
 );
 
-impl OptimisticTransactionDB {
+impl OptimisticTransactionDb {
     pub(crate) fn ffi_open(
         options: *const ffi::rocksdb_options_t,
         path: *const libc::c_char,
@@ -94,14 +94,14 @@ impl OptimisticTransactionDB {
     /// database.  This has to be freed when done, hence the use of a closure to guarantee that
     /// happens
     pub(crate) unsafe fn with_base_db<T, F: FnOnce(*mut ffi::rocksdb_t) -> Result<T>>(
-        handle: &OptimisticTransactionDBHandle,
+        handle: &OptimisticTransactionDbHandle,
         func: F,
     ) -> Result<T> {
         // The optimistic transaction DB API is slightly different than either of the others.
         // The regular `DB` has a `put_cf` operation.  The `TransactionDB` does also.  But
-        // `OptimisticTransactionDB` doesn't have its own separate `put_cf` operation; rather it
+        // `OptimisticTransactionDb` doesn't have its own separate `put_cf` operation; rather it
         // exposes a function to get the "base" `DB` and you can use that to do a `put`.  I suppose
-        // this is because of the difference in implementation; `OptimisticTransactionDB` doesn't do
+        // this is because of the difference in implementation; `OptimisticTransactionDb` doesn't do
         // any locking or conflict detection except within the context of an explicitly created
         // transaction, so it delegates operations outside of transactions to the underlying
         // non-transactional implementation.  That's just a guess on my part.
@@ -121,16 +121,16 @@ impl OptimisticTransactionDB {
     }
 }
 
-impl crate::error::ErrorPostprocessor for OptimisticTransactionDB {
+impl crate::error::ErrorPostprocessor for OptimisticTransactionDb {
     fn postprocess_error(&self, err: Error) -> Error {
         match err {
-            Error::RocksDBError { status, backtrace }
+            Error::RocksDbError { status, backtrace }
                 if status.code == crate::status::Code::Busy
                     && status.subcode == crate::status::SubCode::None =>
             {
                 // This is how commit operations fail when optimistic locking is enabled.  This
                 // error would be expected to happen at commit time.
-                Error::RocksDBConflict { backtrace }
+                Error::RocksDbConflict { backtrace }
             }
             other => other,
         }

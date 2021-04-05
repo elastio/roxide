@@ -17,7 +17,7 @@ pub trait CreateCheckpoint: RocksOpBase {
     fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint>;
 }
 
-impl CreateCheckpoint for DB {
+impl CreateCheckpoint for Db {
     fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         op_metrics::instrument_db_op(
             self,
@@ -37,7 +37,7 @@ impl CreateCheckpoint for DB {
     }
 }
 
-impl CreateCheckpoint for TransactionDB {
+impl CreateCheckpoint for TransactionDb {
     fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         op_metrics::instrument_db_op(
             self,
@@ -57,7 +57,7 @@ impl CreateCheckpoint for TransactionDB {
     }
 }
 
-impl CreateCheckpoint for OptimisticTransactionDB {
+impl CreateCheckpoint for OptimisticTransactionDb {
     fn create_checkpoint(&self, path: impl Into<path::PathBuf>) -> Result<checkpoint::Checkpoint> {
         // The optimistic transaction DB API is slightly different than either of the others.
         // See the comment in `put.rs` for the details
@@ -82,14 +82,14 @@ impl CreateCheckpoint for OptimisticTransactionDB {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::DBLike;
-    use crate::ops::{DBOpen, Put};
-    use crate::test::TempDBPath;
+    use crate::db::DbLike;
+    use crate::ops::{DbOpen, Put};
+    use crate::test::TempDbPath;
 
     #[test]
     fn db_checkpoint() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -101,8 +101,8 @@ mod test {
 
     #[test]
     fn txdb_checkpoint() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -114,8 +114,8 @@ mod test {
 
     #[test]
     fn opt_txdb_checkpoint() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         db.put(&cf, "foo", "bar", None)?;
@@ -130,8 +130,8 @@ mod test {
     /// WTF??
     #[test]
     fn checkpoint_id_changes() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let id = db.get_db_id().unwrap();
         let cf = db.get_cf("default").unwrap();
 
@@ -139,7 +139,7 @@ mod test {
 
         let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
 
-        let checkpoint_db = DB::open(checkpoint.path(), None)?;
+        let checkpoint_db = Db::open(checkpoint.path(), None)?;
         assert_ne!(id, checkpoint_db.get_db_id().unwrap());
 
         Ok(())

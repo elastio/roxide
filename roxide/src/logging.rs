@@ -376,7 +376,7 @@ pub trait RocksDbLogger: Send + Sync + Any {
     /// the database needs to be opened, and THEN queried for the DB ID, which is part of the
     /// context.  Thus, loggers are initially created with a partial context, then filled out with
     /// the full context only after the open operation completes successfully.
-    fn set_context<'a>(&self, context: DatabaseLabels<'a>);
+    fn set_context(&self, context: DatabaseLabels);
 }
 
 /// An implementation of `RocksDbLogger` which passes log events to Cheburashka, our observability
@@ -469,7 +469,7 @@ impl RocksDbLogger for CheburashkaLogger {
         }
     }
 
-    fn set_context<'a>(&self, context: DatabaseLabels<'a>) {
+    fn set_context(&self, context: DatabaseLabels) {
         // Replace the span with a new one created by this context
         let mut guard = self.span.write();
 
@@ -531,10 +531,10 @@ impl CppLoggerWrapper {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::db::{DBLike, DB};
-    use crate::db_options::DBOptions;
-    use crate::ops::{Compact, DBOpen, Flush};
-    use crate::test::TempDBPath;
+    use crate::db::{Db, DbLike};
+    use crate::db_options::DbOptions;
+    use crate::ops::{Compact, DbOpen, Flush};
+    use crate::test::TempDbPath;
     use crate::Result;
     use std::sync::{Arc, Mutex};
 
@@ -573,7 +573,7 @@ pub(crate) mod tests {
             self.json_events.lock().unwrap().push(msg);
         }
 
-        fn set_context<'a>(&self, new_context: DatabaseLabels<'a>) {
+        fn set_context(&self, new_context: DatabaseLabels) {
             let mut context = self.context.lock().unwrap();
 
             context.clear();
@@ -587,11 +587,11 @@ pub(crate) mod tests {
 
         let messages = logger.messages.clone();
 
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
-        let path = TempDBPath::new();
-        let db = DB::open(&path, options)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         crate::test::fill_db(&db, &cf, 1_000)?;
@@ -620,11 +620,11 @@ pub(crate) mod tests {
         let json_events = logger.json_events.clone();
         let messages = logger.messages.clone();
 
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Trace, logger);
 
-        let path = TempDBPath::new();
-        let db = DB::open(&path, options)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write the same keys but different random values multiple times

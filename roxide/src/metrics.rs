@@ -321,7 +321,7 @@ lazy_static! {
 /// default Prometheus registry for the process.  This should be called immediately before
 /// responding to a request on a `/metrics` URL by a Prometheus scraper.
 pub fn update_rocks_metrics(
-    db: &(impl crate::db::DBLike + crate::ops::Stats + crate::ops::GetProperty),
+    db: &(impl crate::db::DbLike + crate::ops::Stats + crate::ops::GetProperty),
 ) -> Result<()> {
     let labels = get_db_metric_labels(db);
 
@@ -457,22 +457,22 @@ fn update_rocks_cf_gauge_f64(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{DBLike, DB};
-    use crate::db_options::DBOptions;
-    use crate::ops::{Compact, DBOpen, StatsLevel};
-    use crate::test::TempDBPath;
+    use crate::db::{Db, DbLike};
+    use crate::db_options::DbOptions;
+    use crate::ops::{Compact, DbOpen, StatsLevel};
+    use crate::test::TempDbPath;
     use crate::Result;
     use maplit::hashmap;
 
     #[test]
     fn update_stats_from_db() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.set_stats_level(StatsLevel::Minimal);
         options.add_column_family("foo");
         options.add_column_family("bar");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         // Generate some activity so the metrics have something to report
         // The per-level stats in the CF metrics are not even reported by RocksDB unless there has

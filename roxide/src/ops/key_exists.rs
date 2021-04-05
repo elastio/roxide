@@ -9,7 +9,7 @@ use crate::db;
 use crate::db_options::ReadOptions;
 use crate::ffi;
 use crate::handle::{RocksObject, RocksObjectDefault};
-use crate::ops::{GetDBPtr, RocksOpBase};
+use crate::ops::{GetDbPtr, RocksOpBase};
 use crate::status;
 use crate::tx::{sync, unsync};
 use crate::Result;
@@ -206,7 +206,7 @@ pub trait KeyExists: RocksOpBase {
     }
 }
 
-impl<T: GetDBPtr> KeyExists for T {
+impl<T: GetDbPtr> KeyExists for T {
     unsafe fn raw_key_exists(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -323,13 +323,13 @@ impl KeyExists for sync::Transaction {
 mod test {
     use super::*;
     use crate::db::ColumnFamilyLike;
-    use crate::db::DBLike;
+    use crate::db::DbLike;
     use crate::db::{db::*, opt_txdb::*, txdb::*};
     use crate::ops::{BeginTrans, Get, Put};
-    use crate::test::{self, TempDBPath};
+    use crate::test::{self, TempDbPath};
 
-    fn create_test_db<DBT: DBOpen + DBLike>() -> Result<(TempDBPath, DBT, DBT::ColumnFamilyType)> {
-        let path = TempDBPath::new();
+    fn create_test_db<DBT: DbOpen + DbLike>() -> Result<(TempDbPath, DBT, DBT::ColumnFamilyType)> {
+        let path = TempDbPath::new();
         let db = DBT::create_new(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
@@ -369,14 +369,14 @@ mod test {
 
     #[test]
     fn db_key_exists() -> Result<()> {
-        let (_path, db, cf) = create_test_db::<DB>()?;
+        let (_path, db, cf) = create_test_db::<Db>()?;
 
         key_exists_impl_test(&db, &cf)
     }
 
     #[test]
     fn txdb_key_exists() -> Result<()> {
-        let (_path, db, cf) = create_test_db::<TransactionDB>()?;
+        let (_path, db, cf) = create_test_db::<TransactionDb>()?;
 
         key_exists_impl_test(&db, &cf)?;
         let tx = db.begin_trans(None, None)?;
@@ -385,7 +385,7 @@ mod test {
 
     #[test]
     fn opt_txdb_key_exists() -> Result<()> {
-        let (_path, db, cf) = create_test_db::<OptimisticTransactionDB>()?;
+        let (_path, db, cf) = create_test_db::<OptimisticTransactionDb>()?;
 
         key_exists_impl_test(&db, &cf)?;
         let tx = db.begin_trans(None, None)?;
@@ -394,7 +394,7 @@ mod test {
 
     #[test]
     fn sync_tx_key_exists() -> Result<()> {
-        let (_path, db, cf) = create_test_db::<OptimisticTransactionDB>()?;
+        let (_path, db, cf) = create_test_db::<OptimisticTransactionDb>()?;
         let tx = db.begin_trans(None, None)?.into_sync();
 
         key_exists_impl_test(&tx, &cf)

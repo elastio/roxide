@@ -369,10 +369,10 @@ impl CppListenerWrapper {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{db::DB, DBLike};
-    use crate::db_options::DBOptions;
-    use crate::ops::{Compact, DBOpen, Flush};
-    use crate::test::TempDBPath;
+    use crate::db::{db::Db, DbLike};
+    use crate::db_options::DbOptions;
+    use crate::ops::{Compact, DbOpen, Flush};
+    use crate::test::TempDbPath;
     use crate::Result;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
@@ -456,8 +456,8 @@ mod test {
 
     #[test]
     fn events_raised() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         let listener = CountingTestListener::new();
         let flush_count = listener.flushes.clone();
         let compact_count = listener.compactions.clone();
@@ -468,7 +468,7 @@ mod test {
         // related to testing that the events bridge works properly.
         options.set_db_option("atomic_flush", "false");
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write some data to there's somethign to flush
@@ -502,13 +502,13 @@ mod test {
 
     #[test]
     fn background_error_reported() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         let listener = CountingTestListener::new();
         let errors = listener.errors.clone();
         options.set_event_listener(listener);
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write some data to there's somethign to flush
@@ -532,13 +532,13 @@ mod test {
 
     #[test]
     fn job_info_marshalled() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         let listener = CountingTestListener::new();
         let job_ids = listener.job_ids.clone();
         options.set_event_listener(listener);
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let cf = db.get_cf("default").unwrap();
 
         // Write some data to there's somethign to flush

@@ -1,4 +1,4 @@
-//! The `GetDBPtr` operation exposes the raw C++ pointer `rocksdb::DB` base class of
+//! The `GetDbPtr` operation exposes the raw C++ pointer `rocksdb::DB` base class of
 //! any RocksDB database type.  That struct contains some state, most importantly `Statistics`,
 //! that is of interest to Rust code
 use super::*;
@@ -9,7 +9,7 @@ cpp! {{
     #include "src/lib.h"
 }}
 
-pub trait GetDBPtr: RocksOpBase {
+pub trait GetDbPtr: RocksOpBase {
     /// Raw version of `get_db_ptr`, operating on unsafe C bindings.  Not intended for use by external
     /// crates.
     ///
@@ -24,7 +24,7 @@ pub trait GetDBPtr: RocksOpBase {
     }
 }
 
-impl GetDBPtr for DB {
+impl GetDbPtr for Db {
     unsafe fn raw_get_db_ptr(handle: &Self::HandleType) -> *mut libc::c_void {
         let db_ptr = handle.rocks_ptr().as_ptr();
 
@@ -34,7 +34,7 @@ impl GetDBPtr for DB {
     }
 }
 
-impl GetDBPtr for TransactionDB {
+impl GetDbPtr for TransactionDb {
     unsafe fn raw_get_db_ptr(handle: &Self::HandleType) -> *mut libc::c_void {
         let db_ptr = handle.rocks_ptr().as_ptr();
 
@@ -44,7 +44,7 @@ impl GetDBPtr for TransactionDB {
     }
 }
 
-impl GetDBPtr for OptimisticTransactionDB {
+impl GetDbPtr for OptimisticTransactionDb {
     unsafe fn raw_get_db_ptr(handle: &Self::HandleType) -> *mut libc::c_void {
         let db_ptr = handle.rocks_ptr().as_ptr();
 
@@ -57,14 +57,14 @@ impl GetDBPtr for OptimisticTransactionDB {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ops::DBOpen;
-    use crate::test::TempDBPath;
+    use crate::ops::DbOpen;
+    use crate::test::TempDbPath;
     use crate::Result;
 
     #[test]
     fn db_get_ptr() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
 
         let db_ptr = db.get_db_ptr();
 
@@ -75,8 +75,8 @@ mod test {
 
     #[test]
     fn txdb_get_ptr() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
 
         let db_ptr = db.get_db_ptr();
 
@@ -87,8 +87,8 @@ mod test {
 
     #[test]
     fn opt_txdb_get_ptr() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = OptimisticTransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
 
         let db_ptr = db.get_db_ptr();
 

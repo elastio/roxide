@@ -2,7 +2,7 @@
 //! cannot ever change after that.
 //!
 //! This isn't exposed in the C bindings but it can be obtained if one is sufficiently motivated.
-use super::get_db_ptr::GetDBPtr;
+use super::get_db_ptr::GetDbPtr;
 use super::*;
 
 cpp! {{
@@ -10,7 +10,7 @@ cpp! {{
 
 }}
 
-pub trait GetDBId: RocksOpBase {
+pub trait GetDbId: RocksOpBase {
     /// Raw version of `get_db_id`, operating on unsafe C bindings.  Not intended for use by external
     /// crates.
     ///
@@ -29,7 +29,7 @@ pub trait GetDBId: RocksOpBase {
             if (res == rocksdb::Status::OK()) {
                 auto c_id_ptr = id.c_str();
 
-                rust!(GetDBId_set_id_string [c_id_ptr: *const libc::c_char as "const char*", db_id_ptr: *mut String as "void*"] {
+                rust!(GetDbId_set_id_string [c_id_ptr: *const libc::c_char as "const char*", db_id_ptr: *mut String as "void*"] {
                     (*db_id_ptr).push_str(std::ffi::CStr::from_ptr(c_id_ptr).to_string_lossy().as_ref());
                 });
             }
@@ -53,9 +53,9 @@ pub trait GetDBId: RocksOpBase {
     fn get_db_id(&self) -> Option<String>;
 }
 
-impl<DB> GetDBId for DB
+impl<DB> GetDbId for DB
 where
-    DB: GetDBPtr,
+    DB: GetDbPtr,
 {
     fn get_db_id(&self) -> Option<String> {
         // NOTE: This implementation is probably useless, now that we've modified the DB structs to
@@ -73,15 +73,15 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{db::*, DBLike};
-    use crate::ops::DBOpen;
-    use crate::test::TempDBPath;
+    use crate::db::{db::*, DbLike};
+    use crate::ops::DbOpen;
+    use crate::test::TempDbPath;
     use crate::Result;
 
     #[test]
     fn db_get_id() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
 
         let id = db.get_db_id().unwrap();
 
@@ -95,12 +95,12 @@ mod test {
     #[test]
     fn id_always_different() {
         // For each created database there should be a different ID
-        let path = TempDBPath::new();
-        let db1 = DB::open(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db1 = Db::open(&path, None).unwrap();
         let id1 = db1.get_db_id().unwrap();
 
-        let path = TempDBPath::new();
-        let db2 = DB::open(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db2 = Db::open(&path, None).unwrap();
         let id2 = db2.get_db_id().unwrap();
 
         assert_ne!(id1, id2);
@@ -109,12 +109,12 @@ mod test {
     #[test]
     fn id_never_changes() {
         // When re-opening an existing database the ID should be unchanged
-        let path = TempDBPath::new();
-        let db1 = DB::open(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db1 = Db::open(&path, None).unwrap();
         let id1 = db1.get_db_id().unwrap();
         drop(db1);
 
-        let db2 = DB::open(&path, None).unwrap();
+        let db2 = Db::open(&path, None).unwrap();
         let id2 = db2.get_db_id().unwrap();
 
         assert_eq!(id1, id2);
@@ -124,20 +124,20 @@ mod test {
     fn id_matches_cached_id() {
         // All database structs now provide a `db_id()` method that returns a cached reference to
         // the ID string.  That should match any string returned by the `get_db_id` function
-        let path = TempDBPath::new();
-        let db1 = DB::open(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db1 = Db::open(&path, None).unwrap();
         let id1 = db1.get_db_id().unwrap();
         assert_eq!(id1, db1.db_id());
         drop(db1);
 
-        let db2 = DB::open(&path, None).unwrap();
+        let db2 = Db::open(&path, None).unwrap();
         assert_eq!(id1, db2.db_id());
     }
 
     #[test]
     fn id_is_a_uuid() {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None).unwrap();
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None).unwrap();
         let id = db.get_db_id().unwrap();
 
         let uuid = uuid::Uuid::parse_str(&id).unwrap();

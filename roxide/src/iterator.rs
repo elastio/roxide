@@ -29,7 +29,7 @@
 //! This is, perhaps confusingly, also used for DB-level prefix iteration, because that is
 //! implemented entirely within RocksDB and doesn't need a separate iterator impl.
 //!
-//! * [`DBRangeIterator`] - An iterator which iterates over a specific range of values, using a
+//! * [`DbRangeIterator`] - An iterator which iterates over a specific range of values, using a
 //! transactionless database iterator.  This uses RocksDB's internal implementation to limit the
 //! iterator to the initial range, so it's high performance.  This uses `UnboundedIterator`
 //! internally, the only difference is that is holds onto the memory containing the range keys for
@@ -257,7 +257,7 @@ impl RocksIterator for UnboundedIterator {
 /// This uses `UnboundedIterator` internally, because Rocks implements the range limits itself.
 /// The only reason there's a separate type for DB range iteration is the requirement to keep the
 /// range bounds pinned in memory and accessible to Rocks for the life of the iterator.
-pub struct DBRangeIterator {
+pub struct DbRangeIterator {
     inner: UnboundedIterator,
 
     /// We have to hold on to this memory where the upper and lower key bounds are stored, until
@@ -265,7 +265,7 @@ pub struct DBRangeIterator {
     range: Option<OpenKeyRange<(*mut u8, usize)>>,
 }
 
-impl DBRangeIterator {
+impl DbRangeIterator {
     pub(crate) fn new(
         parent: handle::AnonymousHandle,
         iterator: impl Into<IteratorHandle>,
@@ -279,7 +279,7 @@ impl DBRangeIterator {
     }
 }
 
-impl RocksIterator for DBRangeIterator {
+impl RocksIterator for DbRangeIterator {
     fn from_start(&mut self) {
         self.inner.from_start();
     }
@@ -321,7 +321,7 @@ impl RocksIterator for DBRangeIterator {
     }
 }
 
-impl Drop for DBRangeIterator {
+impl Drop for DbRangeIterator {
     fn drop(&mut self) {
         // Everything else will free itself properly but the range keys need to be turned back into
         // Rust `Vec`s and freed
@@ -598,10 +598,10 @@ impl handle::RocksObject<ffi::rocksdb_iterator_t> for RawIterator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::db::{DBLike, TransactionDB, DB};
-    use crate::ops::{BeginTrans, DBOpen, IterateAll, IteratePrefix, IterateRange, Put};
-    use crate::test::TempDBPath;
-    use crate::DBOptions;
+    use crate::db::{Db, DbLike, TransactionDb};
+    use crate::ops::{BeginTrans, DbOpen, IterateAll, IteratePrefix, IterateRange, Put};
+    use crate::test::TempDbPath;
+    use crate::DbOptions;
     use crate::Result;
     use maplit::hashmap;
     use rand::{prelude::*, seq::SliceRandom};
@@ -657,8 +657,8 @@ mod test {
     /// Exercise iterating when the key is a u64 whose expected order we know in advance
     #[test]
     fn db_iterate_u64() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Fill the database with some values and expect the iterator to produce them in sorted
@@ -666,7 +666,7 @@ mod test {
         let mut expected_pairs = Vec::new();
         for i in 2..100u64 {
             // Skip from 10 to 20
-            if i < 10 || i > 20 {
+            if !(10..=20).contains(&i) {
                 expected_pairs.push((u64_to_bytes(i), format!("foo{}", i).into_bytes()));
             }
         }
@@ -702,8 +702,8 @@ mod test {
     /// Exercise all and range iteration in the database using binary strings
     #[test]
     fn db_iterate_binarystr() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Fill the database with some values and expect the iterator to produce them in sorted
@@ -768,15 +768,15 @@ mod test {
     fn db_iterate_prefix() -> Result<()> {
         // When a column family is configured with a prefix extractor, iterator seeks are assumed
         // to be seeks to the first of all keys that have a prefix equal to the seek value.
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("standard");
         // Configure the `prefixed` CF with 3 byte fixed prefix extractor, so the first three bytes
         // of all keys will be treated as a prefix, grouping all keys with that same prefix
         // together during iteration
         options.add_column_family_opts("prefixed", &hashmap!["prefix_extractor" => "fixed:3" ]);
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let std_cf = db.get_cf("standard").unwrap();
         let prefixed_cf = db.get_cf("prefixed").unwrap();
 
@@ -833,14 +833,14 @@ mod test {
     /// Iterating over a range within a prefix: when you really like to live dangerously
     #[test]
     fn db_iterate_prefix_range() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         // Configure the `prefixed` CF with 3 byte fixed prefix extractor, so the first three bytes
         // of all keys will be treated as a prefix, grouping all keys with that same prefix
         // together during iteration
         options.add_column_family_opts("prefixed", &hashmap!["prefix_extractor" => "fixed:3" ]);
 
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let prefixed_cf = db.get_cf("prefixed").unwrap();
 
         // Fill both CFs with the same data
@@ -881,15 +881,15 @@ mod test {
     /// commands and verify the result is the same.
     #[test]
     fn transaction_range_iterator_conformance() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         // Use numbers to make reasoning about the range easier.
         // numbers 2 through 99, with 10-20 (inclusive) missing
         for i in 2..100u64 {
             // Skip from 10 to 20
-            if i < 10 || i > 20 {
+            if !(10..=20).contains(&i) {
                 let key = u64_to_bytes(i);
                 let value = format!("foo{}", i).into_bytes();
 
@@ -968,8 +968,8 @@ mod test {
     /// iterator code immensely!
     #[test]
     fn rocks_tx_iterator_doesnt_support_range() -> Result<()> {
-        let path = TempDBPath::new();
-        let db = TransactionDB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -1031,10 +1031,10 @@ mod test {
     /// code
     #[test]
     fn rocks_tx_iterator_doesnt_support_prefix() -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family_opts("prefixed", &hashmap!["prefix_extractor" => "fixed:3" ]);
-        let db = TransactionDB::open(&path, options)?;
+        let db = TransactionDb::open(&path, options)?;
         let cf = db.get_cf("prefixed").unwrap();
 
         let tx = db.begin_trans(None, None)?;
@@ -1092,10 +1092,10 @@ mod test {
     fn iterate_with_prefix_hint_vs_iterate_prefix() -> Result<()> {
         // All database and transaction types support `iterate_with_prefix_hint`.  But only the
         // database types actually use the prefix hit to accelerate iterator lookups.
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family_opts("prefixed", &hashmap!["prefix_extractor" => "fixed:3" ]);
-        let db = TransactionDB::open(&path, options)?;
+        let db = TransactionDb::open(&path, options)?;
         let cf = db.get_cf("prefixed").unwrap();
 
         let expected_pairs: Vec<(&[u8], &[u8])> = vec![
@@ -1250,8 +1250,8 @@ mod test {
             Ok(current)
         }
 
-        let path = TempDBPath::new();
-        let db = DB::open(&path, None)?;
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         let mut all_keys = Vec::new();

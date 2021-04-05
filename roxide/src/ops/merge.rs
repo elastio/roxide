@@ -149,7 +149,7 @@ pub trait Merge: ops::RocksOpBase {
     }
 }
 
-impl Merge for DB {
+impl Merge for Db {
     unsafe fn raw_merge(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -169,7 +169,7 @@ impl Merge for DB {
     }
 }
 
-impl Merge for TransactionDB {
+impl Merge for TransactionDb {
     unsafe fn raw_merge(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -189,7 +189,7 @@ impl Merge for TransactionDB {
     }
 }
 
-impl Merge for OptimisticTransactionDB {
+impl Merge for OptimisticTransactionDb {
     unsafe fn raw_merge(
         handle: &Self::HandleType,
         cf: NonNull<ffi::rocksdb_column_family_handle_t>,
@@ -372,10 +372,10 @@ impl Merge for sync::Transaction {
 mod test {
     use super::*;
     use crate::db::*;
-    use crate::db_options::DBOptions;
+    use crate::db_options::DbOptions;
     use crate::merge::MergeOperands;
     use crate::ops::Get;
-    use crate::test::TempDBPath;
+    use crate::test::TempDbPath;
     use crate::Result;
     #[cfg(test)]
     extern crate quickcheck;
@@ -418,11 +418,11 @@ mod test {
 
     #[quickcheck]
     fn full_merge_operator(values: Vec<u64>) -> Result<()> {
-        let path = TempDBPath::new();
-        let mut options = DBOptions::default();
+        let path = TempDbPath::new();
+        let mut options = DbOptions::default();
         options.add_column_family("max");
         options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
 
         let max_cf = db.get_cf("max").unwrap();
 
@@ -455,12 +455,12 @@ mod test {
     /// exercises a compaction pathway
     #[quickcheck]
     fn merge_values_during_reopen(values: Vec<u64>) -> Result<()> {
-        let path = TempDBPath::new();
+        let path = TempDbPath::new();
         {
-            let mut options = DBOptions::default();
+            let mut options = DbOptions::default();
             options.add_column_family("max");
             options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
-            let db = DB::open(&path, options)?;
+            let db = Db::open(&path, options)?;
 
             let default_cf = db.get_cf("default").unwrap();
             let max_cf = db.get_cf("max").unwrap();
@@ -474,10 +474,10 @@ mod test {
             }
         }
 
-        let mut options = DBOptions::default();
+        let mut options = DbOptions::default();
         options.add_column_family("max");
         options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
-        let db = DB::open(&path, options)?;
+        let db = Db::open(&path, options)?;
         let default_cf = db.get_cf("default").unwrap();
         let max_cf = db.get_cf("max").unwrap();
 
