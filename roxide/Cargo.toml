@@ -12,8 +12,8 @@ default = ["anyhow"]
 [dependencies]
 anyhow = { version = "1.0", optional = true }
 async-trait = "0.1.48"
-elasyncio = { path = "../elasyncio" }
 cheburashka = { version = "1.0", registry = "elastio-private" }
+elasyncio = { version = "1.0", registry = "elastio-private" }
 cpp = "0.5"
 futures = "0.3"
 hex = "0.4"
