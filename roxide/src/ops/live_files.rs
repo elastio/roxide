@@ -27,6 +27,8 @@ pub struct SstFile {
 
     /// The size in bytes of the file on disk
     pub file_size: usize,
+
+    pub crc32c_checksum: u32,
 }
 
 pub trait GetLiveFiles: RocksOpBase {
@@ -62,6 +64,13 @@ where
                             auto file_number = iterator->file_number;
                             auto file_size = iterator->size;
 
+                            // Default CRC32c checksum generator stores checksum inside std::string
+                            // using reinterpret_cast, so we can't convert it to rust string using
+                            // to_string_lossy(), because it will replace invalid UTF-8 characters
+                            uint32_t file_checksum_uint = iterator->file_checksum.length() == 4
+                                ? *reinterpret_cast<const uint32_t*>(iterator->file_checksum.data())
+                                : 0u;
+
                             // For some reason, `file_name` always starts with a leading `/`, even though
                             // it's meant to be the path relative to db_path.  Fix that in C++ where
                             // anything goes.
@@ -76,14 +85,16 @@ where
                                 db_path: *const libc::c_char as "const char*",
                                 file_name: *const libc::c_char as "const char*",
                                 file_number: u64 as "uint64_t",
-                                file_size: libc::size_t as "size_t"
+                                file_size: libc::size_t as "size_t",
+                                file_checksum_uint: u32 as "uint32_t"
                             ] {
                                 (*files_vec_ptr).push( SstFile {
                                     column_family_name: ffi_util::string_from_char_ptr(column_family_name_ptr),
                                     level: level as _,
                                     file_path: ffi_util::path_from_char_ptr(db_path).join(ffi_util::path_from_char_ptr(file_name)),
                                     file_number: file_number as _,
-                                    file_size: file_size as _
+                                    file_size: file_size as _,
+                                    crc32c_checksum: file_checksum_uint as _
                                 })
                             });
                         }

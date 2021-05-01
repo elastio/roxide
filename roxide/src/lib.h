@@ -5,12 +5,13 @@
 #pragma once
 
 // All of the other C++ header files in this crate will include this one, as it's kind of like the project's
-// main heade file.  This is also where helper functions will be declared that are shared between modules
+// main header file.  This is also where helper functions will be declared that are shared between modules
 
 #include <rocksdb/c.h>
 #include <rocksdb/convenience.h>
 #include <rocksdb/db.h>
 #include <rocksdb/env.h>
+#include <rocksdb/file_checksum.h>
 #include <rocksdb/iostats_context.h>
 #include <rocksdb/listener.h>
 #include <rocksdb/options.h>

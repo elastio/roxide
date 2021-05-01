@@ -531,6 +531,8 @@ impl DbOptions {
             opts.set_event_listener(event_listener);
         }
 
+        opts.set_default_checksum_gen_factory();
+
         // Always enable statistis collection.  This is not that expensive; it's the level of the
         // `Statistics` object that determines the overhead.  Initially it's `kDisable`
         unsafe {
@@ -1093,6 +1095,9 @@ pub trait OptionsExt {
 
     /// Sets an event listener to be notified of RocksDB internal events
     fn set_event_listener(&mut self, listener: Box<dyn events::RocksDbEventListener>);
+
+    /// Sets default crc32 checksum generator factory
+    fn set_default_checksum_gen_factory(&mut self);
 }
 
 impl OptionsExt for Options {
@@ -1227,6 +1232,16 @@ impl OptionsExt for Options {
         unsafe {
             cpp!([options_ptr as "rocksdb_options_t*", boxed_listener as "void*"] {
                 cast_to_options(options_ptr)->listeners.emplace_back(new RustEventListener(boxed_listener));
+            })
+        }
+    }
+
+    /// Sets default crc32 checksum generator factory
+    fn set_default_checksum_gen_factory(&mut self) {
+        let options_ptr = self.inner;
+        unsafe {
+            cpp!([options_ptr as "rocksdb_options_t*"] {
+                cast_to_options(options_ptr)->file_checksum_gen_factory = GetFileChecksumGenCrc32cFactory();
             })
         }
     }
