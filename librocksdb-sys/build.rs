@@ -38,7 +38,7 @@ fn bindgen_rocksdb() {
     let bindings = bindgen::Builder::default()
         .header(rocksdb_include_dir() + "/rocksdb/c.h")
         .derive_debug(false)
-        .blacklist_type("max_align_t") // https://github.com/rust-lang-nursery/rust-bindgen/issues/550
+        .blocklist_type("max_align_t") // https://github.com/rust-lang-nursery/rust-bindgen/issues/550
         .ctypes_prefix("libc")
         .size_t_is_usize(true)
         .generate()
@@ -63,7 +63,8 @@ fn build_rocksdb() {
     ]
     .iter()
     .map(|include| {
-        dunce::canonicalize(include).expect(&format!("Failed to canonicalize path {}", include))
+        dunce::canonicalize(include)
+            .unwrap_or_else(|e| panic!("Failed to canonicalize path {}: {}", include, e))
     })
     .collect();
 
@@ -248,8 +249,9 @@ fn build_rocksdb() {
             if !dummy_file_path.exists() {
                 let mut dummy_file = fs::File::create(&dummy_file_path).unwrap();
 
-                let actual_file_path = dunce::canonicalize(&file)
-                    .expect(&format!("Failed to canonicalize source file path {}", file));
+                let actual_file_path = dunce::canonicalize(&file).unwrap_or_else(|e| {
+                    panic!("Failed to canonicalize source file path {}: {}", file, e)
+                });
 
                 writeln!(
                     dummy_file,
