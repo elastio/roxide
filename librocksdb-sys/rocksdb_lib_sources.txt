@@ -15,7 +15,6 @@ db/blob/blob_log_writer.cc
 db/builder.cc
 db/c.cc
 db/column_family.cc
-db/compacted_db_impl.cc
 db/compaction/compaction.cc
 db/compaction/compaction_iterator.cc
 db/compaction/compaction_job.cc
@@ -26,6 +25,7 @@ db/compaction/compaction_picker_universal.cc
 db/compaction/sst_partitioner.cc
 db/convenience.cc
 db/db_filesnapshot.cc
+db/db_impl/compacted_db_impl.cc
 db/db_impl/db_impl.cc
 db/db_impl/db_impl_compaction_flush.cc
 db/db_impl/db_impl_debug.cc
@@ -76,6 +76,7 @@ db/write_batch.cc
 db/write_batch_base.cc
 db/write_controller.cc
 db/write_thread.cc
+env/composite_env.cc
 env/env.cc
 env/env_chroot.cc
 env/env_encryption.cc
@@ -83,6 +84,7 @@ env/env_hdfs.cc
 env/env_posix.cc
 env/file_system.cc
 env/fs_posix.cc
+env/fs_remap.cc
 env/file_system_tracer.cc
 env/io_posix.cc
 env/mock_env.cc
@@ -90,6 +92,7 @@ file/delete_scheduler.cc
 file/file_prefetch_buffer.cc
 file/file_util.cc
 file/filename.cc
+file/line_file_reader.cc
 file/random_access_file_reader.cc
 file/read_write_util.cc
 file/readahead_raf.cc
@@ -200,11 +203,13 @@ util/comparator.cc
 util/compression_context_cache.cc
 util/concurrent_task_limiter_impl.cc
 util/crc32c.cc
+util/crc32c_arm64.cc
 util/dynamic_bloom.cc
 util/hash.cc
 util/murmurhash.cc
 util/random.cc
 util/rate_limiter.cc
+util/ribbon_config.cc
 util/slice.cc
 util/file_checksum_helper.cc
 util/status.cc
@@ -253,20 +258,6 @@ utilities/trace/file_trace_reader_writer.cc
 utilities/transactions/lock/lock_manager.cc
 utilities/transactions/lock/point/point_lock_tracker.cc
 utilities/transactions/lock/point/point_lock_manager.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/concurrent_tree.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/keyrange.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/lock_request.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/locktree.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/manager.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/range_buffer.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/treenode.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/txnid_set.cc
-utilities/transactions/lock/range/range_tree/lib/locktree/wfg.cc
-utilities/transactions/lock/range/range_tree/lib/standalone_port.cc
-utilities/transactions/lock/range/range_tree/lib/util/dbt.cc
-utilities/transactions/lock/range/range_tree/lib/util/memarena.cc
-utilities/transactions/lock/range/range_tree/range_tree_lock_manager.cc
-utilities/transactions/lock/range/range_tree/range_tree_lock_tracker.cc
 utilities/transactions/optimistic_transaction.cc
 utilities/transactions/optimistic_transaction_db_impl.cc
 utilities/transactions/pessimistic_transaction.cc
