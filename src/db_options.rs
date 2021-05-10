@@ -332,12 +332,8 @@ pub struct FlushOptions {
 
 /// For configuring block-based file storage.
 pub struct BlockBasedOptions {
-<<<<<<< HEAD
-    pub(crate) inner: *mut ffi::rocksdb_block_based_table_options_t,
-    outlive: BlockBasedOptionsMustOutliveDB,
-=======
     pub inner: *mut ffi::rocksdb_block_based_table_options_t,
->>>>>>> dfc48d6 (Make the `inner` field in the options types `pub`)
+    outlive: BlockBasedOptionsMustOutliveDB,
 }
 
 pub struct ReadOptions {
