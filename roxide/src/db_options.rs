@@ -19,7 +19,6 @@ use maplit::hashmap;
 use num_traits::PrimInt;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::ffi::c_void;
 use std::fmt::{self, Display};
 use std::ptr;
 use std::{
@@ -27,6 +26,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use std::{collections::HashMap, ffi::CString};
+use std::{ffi::c_void, sync::Arc};
 
 // Re-export the RocksDB options types for convenience, so callers don't take any direct
 // dependencies on the underlying `rocksdb` crate
@@ -161,7 +161,15 @@ pub struct DbOptions {
     /// So callers must populate the merge operators explicitly even if the rest of the options are
     /// loaded from a config file
     #[serde(skip)]
-    merge_operators: HashMap<String, (String, merge::MergeFn, Option<merge::MergeFn>)>,
+    #[allow(clippy::type_complexity)] // The type is pretty straightforward as utilized
+    merge_operators: HashMap<
+        String,
+        (
+            String,
+            Box<dyn merge::MergeFn>,
+            Option<Box<dyn merge::MergeFn>>,
+        ),
+    >,
 
     /// An optional event listener which will receive various RocksDB notifications
     #[serde(skip)]
@@ -460,8 +468,8 @@ impl DbOptions {
         &mut self,
         cf_name: impl ToString,
         operator_name: impl ToString,
-        full_merge_fn: merge::MergeFn,
-        partial_merge_fn: Option<merge::MergeFn>,
+        full_merge_fn: Box<dyn merge::MergeFn>,
+        partial_merge_fn: Option<Box<dyn merge::MergeFn>>,
     ) -> Result<()> {
         let cf_name = cf_name.to_string();
         if self.column_families.get(&cf_name).is_none() {
@@ -557,7 +565,7 @@ impl DbOptions {
             }
         }
 
-        let merge_operators = self.merge_operators;
+        let mut merge_operators = self.merge_operators;
         let column_family_paths = self.column_family_paths;
 
         // Callers should not generally create an explicit CF called `default`.  The `default` CF
@@ -577,48 +585,78 @@ impl DbOptions {
 
         // Create `ColumnFamilyDescriptor`s for every additional column family
         // If there were any errors, return the first one
-        let cfs: Result<Vec<(String, Options)>, Error> = self
-            .column_families
-            .into_iter()
-            .map(|(name, options)| {
-                let mut options = options;
+        let cfs: Result<Vec<(String, Options)>, Error> =
+            self.column_families
+                .into_iter()
+                .map(|(name, options)| {
+                    let mut options = options;
 
-                // Take special care with `block_based_table_factory`, which unlike the other
-                // options we'll actually parse out of both the default and the CF-specific options
-                // hashes and use the combination of both.
-                if let Some(cf_block_options) = options.get("block_based_table_factory") {
-                    let mut cf_block_options = Self::parse_options_string(cf_block_options);
-                    for (key, value) in default_block_options.iter() {
-                        if !cf_block_options.contains_key(key) {
-                            cf_block_options.insert(key.to_string(), value.to_string());
+                    // Take special care with `block_based_table_factory`, which unlike the other
+                    // options we'll actually parse out of both the default and the CF-specific options
+                    // hashes and use the combination of both.
+                    if let Some(cf_block_options) = options.get("block_based_table_factory") {
+                        let mut cf_block_options = Self::parse_options_string(cf_block_options);
+                        for (key, value) in default_block_options.iter() {
+                            if !cf_block_options.contains_key(key) {
+                                cf_block_options.insert(key.to_string(), value.to_string());
+                            }
+                        }
+
+                        if !cf_block_options.is_empty() {
+                            options.insert(
+                                "block_based_table_factory".to_string(),
+                                Self::build_options_string(&cf_block_options),
+                            );
                         }
                     }
 
-                    if !cf_block_options.is_empty() {
-                        options.insert(
-                            "block_based_table_factory".to_string(),
-                            Self::build_options_string(&cf_block_options),
-                        );
+                    // Start from the default CF options, but layer on this family-specific options
+                    let mut cf_opts = opts.set_cf_options_from_map(&options)?;
+
+                    // If there's a merge operator for this CF, apply that now
+                    // Note we `remove` instead of `get` because the
+                    // `set_merge_operator[_associative]` functions expect to be able to take
+                    // ownership
+                    if let Some((operator_name, full, partial)) = merge_operators.remove(&name) {
+                        // Because MergeFn is a trait we store a boxed dyn trait, but
+                        // `set_merge_operator` expects a specific `MergeFn` impl.
+                        //
+                        // If this is going to be passed to `set_merge_operator_associative` it
+                        // also needs to be `Clone`, because whoever made that rust-rocksdb API
+                        // change was a sadistic bastard.
+                        let full = Arc::new(full);
+                        let full =
+                            move |key: &[u8],
+                                  existing_value: Option<&[u8]>,
+                                  operands: &mut crate::MergeOperands| {
+                                full(key, existing_value, operands)
+                            };
+                        if let Some(partial) = partial {
+                            // Thankfull the hack with Clone is only required for the `full` merge
+                            // fn
+                            let partial = move |key: &[u8],
+                                existing_value: Option<&[u8]>,
+                                operands: &mut crate::MergeOperands| {
+                                    partial(key, existing_value, operands)
+                                };
+                            cf_opts.set_merge_operator(&operator_name, full, partial);
+                        } else {
+                            // There is no support for merging partial merge operands, so there's a
+                            // different setter for that.  It, stupidly, requires that the MergeFn
+                            // also be `Clone`
+                            cf_opts.set_merge_operator_associative(&operator_name, full);
+                        }
                     }
-                }
 
-                // Start from the default CF options, but layer on this family-specific options
-                let mut cf_opts = opts.set_cf_options_from_map(&options)?;
+                    // If there's a custom path for this CF, apply that too
+                    if let Some(cf_path) = column_family_paths.get(&name) {
+                        debug!(cf_name = %name, cf_path = %cf_path.display(), "setting cf db path");
+                        cf_opts.set_cf_path(cf_path)?;
+                    }
 
-                // If there's a merge operator for this CF, apply that now
-                if let Some((operator_name, full, partial)) = merge_operators.get(&name) {
-                    cf_opts.set_merge_operator(&operator_name, *full, *partial);
-                }
-
-                // If there's a custom path for this CF, apply that too
-                if let Some(cf_path) = column_family_paths.get(&name) {
-                    debug!(cf_name = %name, cf_path = %cf_path.display(), "setting cf db path");
-                    cf_opts.set_cf_path(cf_path)?;
-                }
-
-                Ok((name, cf_opts))
-            })
-            .collect();
+                    Ok((name, cf_opts))
+                })
+                .collect();
 
         // Return the error if there is one otherwise unwrap
         let cfs = cfs?;
@@ -1352,7 +1390,12 @@ mod tests {
 
         // Since the merge operators can't be serialized, if we add one then we don't expect them to
         // match
-        options.set_column_family_merge_operator("bar", "my_operator", |_, _, _| None, None)?;
+        options.set_column_family_merge_operator(
+            "bar",
+            "my_operator",
+            Box::new(|_, _, _| None),
+            None,
+        )?;
         let json = serde_json::to_string(&options).unwrap();
         let options2 = serde_json::from_str(&json).unwrap();
 

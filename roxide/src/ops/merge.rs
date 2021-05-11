@@ -421,7 +421,12 @@ mod test {
         let path = TempDbPath::new();
         let mut options = DbOptions::default();
         options.add_column_family("max");
-        options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
+        options.set_column_family_merge_operator(
+            "max",
+            "my_max_operator",
+            Box::new(test_merge),
+            None,
+        )?;
         let db = Db::open(&path, options)?;
 
         let max_cf = db.get_cf("max").unwrap();
@@ -459,7 +464,12 @@ mod test {
         {
             let mut options = DbOptions::default();
             options.add_column_family("max");
-            options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
+            options.set_column_family_merge_operator(
+                "max",
+                "my_max_operator",
+                Box::new(test_merge),
+                None,
+            )?;
             let db = Db::open(&path, options)?;
 
             let default_cf = db.get_cf("default").unwrap();
@@ -476,7 +486,12 @@ mod test {
 
         let mut options = DbOptions::default();
         options.add_column_family("max");
-        options.set_column_family_merge_operator("max", "my_max_operator", test_merge, None)?;
+        options.set_column_family_merge_operator(
+            "max",
+            "my_max_operator",
+            Box::new(test_merge),
+            None,
+        )?;
         let db = Db::open(&path, options)?;
         let default_cf = db.get_cf("default").unwrap();
         let max_cf = db.get_cf("max").unwrap();
