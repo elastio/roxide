@@ -9,12 +9,37 @@ use crate::db;
 use crate::ffi;
 use crate::ffi_util;
 use crate::handle;
+use crate::labels::DatabaseLabels;
+use crate::metrics;
 use crate::rocks_class;
 use crate::Result;
+use cheburashka::{logging::prelude::*, metrics::*};
+use lazy_static::lazy_static;
 use std::path;
 use std::ptr;
 
 rocks_class!(CheckpointHandle, ffi::rocksdb_checkpoint_t, ffi::rocksdb_checkpoint_object_destroy, @send);
+
+lazy_static! {
+    static ref CHECKPOINTS_TOTAL: metrics::DatabaseIntCounter =
+        DatabaseLabels::register_int_counter(
+            "rocksdb_db_checkpoints_total",
+            "The number of checkpoints performed",
+        )
+        .unwrap();
+    static ref CHECKPOINT_SIZE_BYTES: metrics::DatabaseIntGauge =
+        DatabaseLabels::register_int_gauge(
+            "rocksdb_db_checkpoint_size_bytes",
+            "The size in bytes of the most recent checkpoint",
+        )
+        .unwrap();
+    static ref CHECKPOINT_FILE_COUNT: metrics::DatabaseIntGauge =
+        DatabaseLabels::register_int_gauge(
+            "rocksdb_db_checkpoint_file_count",
+            "The number of files in the most recent checkpoint",
+        )
+        .unwrap();
+}
 
 pub struct Checkpoint {
     inner: CheckpointHandle,
@@ -55,15 +80,58 @@ impl Checkpoint {
             ))?;
         }
 
-        Ok(Checkpoint {
+        let checkpoint = Checkpoint {
             inner: checkpoint,
             path,
             _db: db.db_handle(),
-        })
+        };
+
+        // Capture some metrics about the checkpoint.  If this fails it should not fail checkpoint
+        // creation
+        let labels = DatabaseLabels::from(db);
+        if let Err(e) = checkpoint.report_metrics(labels) {
+            warn!(
+                err = log_error(&e),
+                path = %checkpoint.path().display(),
+                "error updating checkpoint metrics; checkpoint operation will proceed"
+            );
+        }
+
+        Ok(checkpoint)
     }
 
     pub fn path(&self) -> &path::Path {
         &self.path
+    }
+
+    /// Update the metrics with the information about this checkpoint
+    fn report_metrics(&self, labels: DatabaseLabels) -> Result<()> {
+        CHECKPOINTS_TOTAL.apply_labels(&labels).unwrap().inc();
+        let mut num_files = 0usize;
+        let mut num_bytes = 0u64;
+
+        for entry in std::fs::read_dir(self.path())? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                num_files += 1;
+
+                let metadata = std::fs::metadata(path)?;
+                num_bytes += metadata.len();
+            }
+        }
+
+        CHECKPOINT_FILE_COUNT
+            .apply_labels(&labels)
+            .unwrap()
+            .set(num_files as i64);
+
+        CHECKPOINT_SIZE_BYTES
+            .apply_labels(&labels)
+            .unwrap()
+            .set(num_bytes as i64);
+
+        Ok(())
     }
 }
 
@@ -132,6 +200,25 @@ mod test {
             "bar",
             check_db.get(&cf, "foo", None)?.unwrap().to_string_lossy()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn checkpoint_reports_metrics() -> Result<()> {
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+
+        // Write some test data to the database before the checkpoint
+        db.put(&cf, "foo", "bar", None)?;
+
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+
+        let labels = DatabaseLabels::from(&db);
+        assert_eq!(1, CHECKPOINTS_TOTAL.apply_labels(&labels).unwrap().get());
+        assert!(CHECKPOINT_FILE_COUNT.apply_labels(&labels).unwrap().get() > 1);
+        assert!(CHECKPOINT_SIZE_BYTES.apply_labels(&labels).unwrap().get() > 1);
 
         Ok(())
     }
