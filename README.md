@@ -1,85 +1,27 @@
-# IMPORTANT
+# Advanced Rust bindings for RocksDB
 
-This is my personal fork, don't use it.  Instead use the [official version](https://github.com/rust-rocksdb/rust-rocksdb)
+This repo contains `roxide`, Elastio's Rust bindings for RocksDB.
 
-# WINDOWS
+Roxide sits on top of our fork of [rust-rocksdb](https://github.com/rust-rocksdb/rust-rocksdb), providing a more
+ergonomic Rust API and a lot of functionality missing in `rust-rocksdb` (transactions, logging, async, and a lot more).
 
-My changes to the RocksDB build process in this fork break Windows support.  Specifically, in `build.rs` I combine all
-of the source files together into one artifact which is compiled as one unit.  That causes a conflict between the
-Winodws function `CreateFile` and an internal RocksDB library function `CreateFile`.  To fix this would require
-reverting to the per-file compilation which breaks the logging support.  Windows support is not worth it to me so it's
-simply disabled.
+# Development Tasks
 
-# What is this?
+## How to Update to a New RocksDB
 
-We use our own layer on top of this crate to improve the RocksDB ergonomics in our Rust code.  That layer needs access
-to some of the internals of `rust-rocksdb` which in the upstream version are private.  So this fork makes those public,
-but otherwise strives to be as close as possible to the upstream code.
+* Update the linked RocksDB version.  See the `roxide-librocksdb-sys/README.md` file for instructions
+* Update the build metadata in the semver version of all three crates, to reflect the current RocksDB version.  For
+  example, if the new RocksDB version is 5.6.7, add `+rocksdb.5.6.7` as the build metadata to the version in
+  `Cargo.toml` for `roxide`, `roxide-rocksdb`, and `roxide-librocksdb-sys`
+* Consider publishing a new release of these crates so that other projects can take advantage of this new version
 
-It also changes how `librocksdb-sys` is built to work around a very stupid assumption bug in the RocksDB code that
-causes log output to be corrupted.
-
-# Procedure to update:
-
-* Update the linked RocksDB version.  See the `librocksdb-sys/README.md` file for instructions
-* Merge the update into the `elastio` branch (we reserve `master` to sync changes from upstream)
-* Create a tag on the repo with the version of Rocks it corresponds to.  Eg `tags/elastio-6.6.4` for the version that uses
-    RocksDB 6.6.4.
-
-Note that, somewhat counterintuitively, the version of the `rust-rocksdb` crate doesn't reflect the RocksDB version.
-Rather, the version of the `librocksdb-sys` does.  Rather than fight that convention, we leave it in place for now.
-Downstream crates incorporate this one via Git submodules using the tag created above.  It's not idea but it works for
-now.
-
-rust-rocksdb
-============
-![RocksDB build](https://github.com/rust-rocksdb/rust-rocksdb/workflows/RocksDB%20build/badge.svg?branch=master)
-[![crates.io](https://img.shields.io/crates/v/rocksdb.svg)](https://crates.io/crates/rocksdb)
-[![documentation](https://docs.rs/rocksdb/badge.svg)](https://docs.rs/rocksdb)
-[![license](https://img.shields.io/crates/l/rocksdb.svg)](https://github.com/rust-rocksdb/rust-rocksdb/blob/master/LICENSE)
-[![Gitter chat](https://badges.gitter.im/rust-rocksdb/gitter.png)](https://gitter.im/rust-rocksdb/lobby)
+Note that the version numbers from `rust-rocksdb` were reset when we make a fork.  That project set the version of
+`librocksdb-sys` to correspond with the version of RocksDB that it wrapped, but we don't do that.
 
 
-![GitHub commits (since latest release)](https://img.shields.io/github/commits-since/rust-rocksdb/rust-rocksdb/latest.svg)
+# Credits
 
-## Requirements
+The original authors and maintainers of [rust-rocksdb](https://github.com/rust-rocksdb/rust-rocksdb) built the
+foundation upon which `roxide` was based.  While we no longer follow this project, it's likely Roxide would have taken
+a much different form without the base of `rust-rocksdb` upon which to grow.
 
-- Clang and LLVM
-
-## Contributing
-
-Feedback and pull requests welcome!  If a particular feature of RocksDB is 
-important to you, please let me know by opening an issue, and I'll 
-prioritize it.
-
-## Usage
-
-This binding is statically linked with a specific version of RocksDB. If you 
-want to build it yourself, make sure you've also cloned the RocksDB and 
-compression submodules:
-
-    git submodule update --init --recursive
-
-## Compression Support
-By default, support for the [Snappy](https://github.com/google/snappy), 
-[LZ4](https://github.com/lz4/lz4), [Zstd](https://github.com/facebook/zstd), 
-[Zlib](https://zlib.net), and [Bzip2](http://www.bzip.org) compression 
-is enabled through crate features.  If support for all of these compression 
-algorithms is not needed, default features can be disabled and specific 
-compression algorithms can be enabled. For example, to enable only LZ4 
-compression support, make these changes to your Cargo.toml:
-
-```
-[dependencies.rocksdb]
-default-features = false
-features = ["lz4"]
-```
-
-## Multi-threaded ColumnFamily alternation
-
-The underlying RocksDB does allow column families to be created and dropped
-from multiple threads concurrently. But this crate doesn't allow it by default
-for compatibility. If you need to modify column families concurrently, enable
-crate feature called `multi-threaded-cf`, which makes this binding's
-data structures to use RwLock by default. Alternatively, you can directly create
-`DBWithThreadMode<MultiThreaded>` without enabling the crate feature.
