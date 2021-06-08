@@ -72,10 +72,16 @@ jobs:
 
     strategy:
       matrix:
-        # Note: Windows builds don't work currently because `clang` isn't installed so `bindgen` fails
+        # Note: Windows builds don't work currently because `clang` isn't
+        # installed so `bindgen` fails
         #
-        # We dont' care about RocksDB on Windows anyway so i didn't bother trying to get it working
-        os: [ubuntu-latest, osx-metal]
+        # We dont' care about RocksDB on Windows anyway so i didn't bother
+        # trying to get it working
+        #
+        # On macOS there was some duplicate symbol error from the linker for
+        # `crc32c_runtime_check` which, again, I didn't bother to run down
+        # because we don't care about Rocks on macOS
+        os: [ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v2
