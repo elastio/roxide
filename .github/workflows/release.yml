@@ -78,7 +78,7 @@ jobs:
           git config user.name "Tsar Ferris"
           git config user.email tsar-ferris@elastio.com
 
-      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force
+      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force --debug
 
       # Perform the actual release operations
       - run: cargo xelastio publish release ${{ github.event.inputs.bumpLevel }}

@@ -180,7 +180,7 @@ jobs:
           packages: |
             cloudsmith-cli
 
-      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force
+      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force --debug
 
       # Perform the actual release operations
       - run: cargo xelastio publish master
