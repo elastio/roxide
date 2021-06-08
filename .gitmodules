@@ -1,15 +1,15 @@
 [submodule "rocksdb_sys/snappy"]
-	path = librocksdb-sys/snappy
+	path = roxide-librocksdb-sys/snappy
 	url = https://github.com/google/snappy.git
 [submodule "rocksdb_sys/rocksdb"]
-	path = librocksdb-sys/rocksdb
+	path = roxide-librocksdb-sys/rocksdb
 	url = https://github.com/facebook/rocksdb.git
-[submodule "librocksdb-sys/lz4"]
-	path = librocksdb-sys/lz4
+[submodule "roxide-librocksdb-sys/lz4"]
+	path = roxide-librocksdb-sys/lz4
 	url = https://github.com/lz4/lz4.git
-[submodule "librocksdb-sys/zstd"]
-	path = librocksdb-sys/zstd
+[submodule "roxide-librocksdb-sys/zstd"]
+	path = roxide-librocksdb-sys/zstd
 	url = https://github.com/facebook/zstd
-[submodule "librocksdb-sys/zlib"]
-	path = librocksdb-sys/zlib
+[submodule "roxide-librocksdb-sys/zlib"]
+	path = roxide-librocksdb-sys/zlib
 	url = https://github.com/madler/zlib.git
