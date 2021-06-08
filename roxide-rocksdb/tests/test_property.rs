@@ -16,7 +16,9 @@ mod util;
 
 use pretty_assertions::assert_eq;
 
-use roxide_rocksdb::{Options, DB};
+#[cfg(not(feature = "multi-threaded-cf"))]
+use roxide_rocksdb::Options;
+use roxide_rocksdb::DB;
 use util::DBPath;
 
 #[test]
@@ -31,6 +33,7 @@ fn property_test() {
 }
 
 #[test]
+#[cfg(not(feature = "multi-threaded-cf"))] // this test compiles with warnings if multi-threaded CF operations aren't enabled
 fn property_cf_test() {
     let n = DBPath::new("_rust_rocksdb_property_cf_test");
     {
@@ -58,6 +61,7 @@ fn property_int_test() {
 }
 
 #[test]
+#[cfg(not(feature = "multi-threaded-cf"))] // this test compiles with warnings if multi-threaded CF operations aren't enabled
 fn property_int_cf_test() {
     let n = DBPath::new("_rust_rocksdb_property_int_cf_test");
     {

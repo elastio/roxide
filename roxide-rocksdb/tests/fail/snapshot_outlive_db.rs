@@ -1,4 +1,4 @@
-use rocksdb::DB;
+use roxide_rocksdb::DB;
 
 fn main() {
     let _snapshot = {

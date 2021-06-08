@@ -16,11 +16,13 @@ mod util;
 
 use pretty_assertions::assert_eq;
 
-use roxide_rocksdb::{ColumnFamilyDescriptor, MergeOperands, Options, DB, DEFAULT_COLUMN_FAMILY_NAME};
+use roxide_rocksdb::{ColumnFamilyDescriptor, MergeOperands, Options, DB};
 use util::DBPath;
 
 #[test]
+#[cfg(not(feature = "multi-threaded-cf"))] // this test compiles with warnings if multi-threaded CF operations aren't enabled
 fn test_column_family() {
+    use roxide_rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
     let n = DBPath::new("_rust_rocksdb_cftest");
 
     // should be able to create column families
@@ -87,6 +89,7 @@ fn test_column_family() {
 }
 
 #[test]
+#[cfg(not(feature = "multi-threaded-cf"))] // this test compiles with warnings if multi-threaded CF operations aren't enabled
 fn test_can_open_db_with_results_of_list_cf() {
     // Test scenario derived from GitHub issue #175 and 177
 
@@ -235,6 +238,7 @@ fn test_column_family_with_options() {
 }
 
 #[test]
+#[cfg(not(feature = "multi-threaded-cf"))] // this test compiles with warnings if multi-threaded CF operations aren't enabled
 fn test_create_duplicate_column_family() {
     let n = DBPath::new("_rust_rocksdb_create_duplicate_column_family");
     {
