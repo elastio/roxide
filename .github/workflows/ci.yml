@@ -124,9 +124,10 @@ jobs:
       - name: Run grcov
         run: |
           # The `--ignore /*` exclues from coverage analysis anything in a cargo crate (meaning includes only this repo)
+          # The `--ignore target/*` ensures that we don't do coverage analysis on generated bindgen code which is pointless
           #
           # without that the `lcov.info` file will be 10s of MB and the shitty Node.js Coveralls importer will eat shit and die
-          ./grcov . --binary-path ./target/debug/ -t lcov -s . -o ./lcov.info  --branch --ignore-not-existing --ignore "/*"
+          ./grcov . --binary-path ./target/debug/ -t lcov -s . -o ./lcov.info  --branch --ignore-not-existing --ignore "/*" --ignore "target/*"
 
           # These commands help with debugging if coveralls ingest is failing
           #file ./lcov.info
