@@ -1,3 +1,7 @@
+// clippy was never run on the rust-rocksdb code, and once it was brought into the same repo with
+// `roxide` issues appeared.  It's not a good use of time to fix this third-party code now
+#![allow(clippy::all)]
+
 use std::path::{Path, PathBuf};
 
 use roxide_rocksdb::{Options, DB};

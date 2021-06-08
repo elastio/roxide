@@ -22,6 +22,9 @@
     unused_unsafe,
     unused_variables
 )]
+// clippy was never run on the rust-rocksdb code, and once it was brought into the same repo with
+// `roxide` issues appeared.  It's not a good use of time to fix this third-party code now
+#![allow(clippy::all)]
 
 use const_cstr::const_cstr;
 use libc::*;
