@@ -70,19 +70,12 @@ jobs:
   rust-test:
     runs-on: ${{ matrix.os }}
 
-    # We don't want unstable jobs to fail our cicd
-    continue-on-error: ${{ matrix.toolchain == 'beta' || matrix.toolchain == 'nightly' }}
-
     strategy:
       matrix:
         # Note: Windows builds don't work currently because `clang` isn't installed so `bindgen` fails
         #
         # We dont' care about RocksDB on Windows anyway so i didn't bother trying to get it working
         os: [ubuntu-latest, osx-metal]
-        toolchain: [""] # a blank string will use the `rust-toolchain` file
-        include:
-          - { os: ubuntu-latest, toolchain: +beta }
-          - { os: ubuntu-latest, toolchain: +nightly }
 
     steps:
       - uses: actions/checkout@v2
@@ -90,11 +83,10 @@ jobs:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.toolchain }}
           profile: minimal
 
-      - run: cargo ${{ matrix.toolchain }} test --workspace --no-run
-      - run: cargo ${{ matrix.toolchain }} test --workspace
+      - run: cargo test --workspace --no-run
+      - run: cargo test --workspace
 
   rust-code-coverage:
     runs-on: ubuntu-latest
