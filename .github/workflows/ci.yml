@@ -76,10 +76,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        toolchain: [stable]
+        toolchain: [""] # a blank string will use the `rust-toolchain` file
         include:
-          - { os: ubuntu-latest, toolchain: beta }
-          - { os: ubuntu-latest, toolchain: nightly }
+          - { os: ubuntu-latest, toolchain: +beta }
+          - { os: ubuntu-latest, toolchain: +nightly }
 
     steps:
       - uses: actions/checkout@v2
@@ -90,8 +90,8 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           profile: minimal
 
-      - run: cargo +${{ matrix.toolchain }} test --workspace --no-run
-      - run: cargo +${{ matrix.toolchain }} test --workspace
+      - run: cargo ${{ matrix.toolchain }} test --workspace --no-run
+      - run: cargo ${{ matrix.toolchain }} test --workspace
 
   rust-code-coverage:
     runs-on: ubuntu-latest
@@ -170,7 +170,6 @@ jobs:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
 
       # Install cloudsmith CLI via pip

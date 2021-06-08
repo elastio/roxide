@@ -34,7 +34,6 @@ jobs:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
           override: true
           components: rustfmt, clippy
@@ -65,7 +64,6 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
 
       # Install cloudsmith CLI via pip
