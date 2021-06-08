@@ -355,6 +355,11 @@ fn build_zstd() {
     compiler.define("ZSTDLIB_VISIBILITY", Some(""));
     compiler.define("ZDICTLIB_VISIBILITY", Some(""));
     compiler.define("ZSTDERRORLIB_VISIBILITY", Some(""));
+
+    // Force the XXHash code to prefix its symbols so that they don't collide with the identical
+    // xxhash code in the lz4 libary
+    compiler.define("XXH_NAMESPACE", Some("ZSTD_"));
+
     compiler.compile("libzstd.a");
 }
 
