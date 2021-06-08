@@ -75,7 +75,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, osx-metal]
         toolchain: [""] # a blank string will use the `rust-toolchain` file
         include:
           - { os: ubuntu-latest, toolchain: +beta }
