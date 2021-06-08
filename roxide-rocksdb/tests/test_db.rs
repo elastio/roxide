@@ -18,7 +18,7 @@ use std::{mem, sync::Arc, thread, time::Duration};
 
 use pretty_assertions::assert_eq;
 
-use rocksdb::{
+use roxide_rocksdb::{
     perf::get_memory_usage_stats, BlockBasedOptions, BottommostLevelCompaction, Cache,
     CompactOptions, DBCompactionStyle, DBWithThreadMode, Env, Error, FifoCompactOptions,
     IteratorMode, MultiThreaded, Options, PerfContext, PerfMetric, ReadOptions, SingleThreaded,
@@ -394,7 +394,7 @@ struct OperationCounts {
     deletes: usize,
 }
 
-impl rocksdb::WriteBatchIterator for OperationCounts {
+impl roxide_rocksdb::WriteBatchIterator for OperationCounts {
     fn put(&mut self, _key: Box<[u8]>, _value: Box<[u8]>) {
         self.puts += 1;
     }
@@ -681,8 +681,8 @@ fn env_and_dbpaths_test() {
 
         {
             let mut paths = Vec::new();
-            paths.push(rocksdb::DBPath::new(&path1, 20 << 20).unwrap());
-            paths.push(rocksdb::DBPath::new(&path2, 30 << 20).unwrap());
+            paths.push(roxide_rocksdb::DBPath::new(&path1, 20 << 20).unwrap());
+            paths.push(roxide_rocksdb::DBPath::new(&path2, 30 << 20).unwrap());
             opts.set_db_paths(&paths);
         }
 

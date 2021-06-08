@@ -16,7 +16,7 @@ mod util;
 
 use pretty_assertions::assert_eq;
 
-use rocksdb::{Options, SliceTransform, DB};
+use roxide_rocksdb::{Options, SliceTransform, DB};
 use util::DBPath;
 
 #[test]

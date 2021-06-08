@@ -34,7 +34,7 @@ once_cell = "1.7"
 parking_lot = "0.11"
 pin-project = "1.0"
 rand = { version = "0.8", features = ["small_rng"] }
-roxide-rocksdb = { path = "../roxide-rocksdb",  default_features = false, features = ["lz4", "zstd"] }
+rocksdb = { path = "../roxide-rocksdb",  package = "roxide-rocksdb", default_features = false, features = ["lz4", "zstd"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 smallvec = "1.5"

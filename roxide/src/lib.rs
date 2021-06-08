@@ -29,7 +29,7 @@ mod tx;
 mod write_batch;
 
 // Let the rest of the code use `crate::ffi` as an alias for the bindgen FFI from the `-sys` crate
-pub use librocksdb_sys as ffi;
+pub use roxide_librocksdb_sys as ffi;
 
 // As a convenience and to improve readability, re-export the `elasyncio` type
 // `BlockingOpFuture`, with the error type defaulting to this crate's own error enum

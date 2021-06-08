@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rocksdb::{Options, DB};
+use roxide_rocksdb::{Options, DB};
 
 /// Temporary database path which calls DB::Destroy when DBPath is dropped.
 pub struct DBPath {

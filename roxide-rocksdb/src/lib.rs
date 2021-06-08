@@ -123,7 +123,7 @@ pub use crate::{
     write_batch::{WriteBatch, WriteBatchIterator},
 };
 
-use librocksdb_sys as ffi;
+use roxide_librocksdb_sys as ffi;
 
 use std::error;
 use std::fmt;
