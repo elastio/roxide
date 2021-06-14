@@ -1,0 +1,6 @@
+[net]
+git-fetch-with-cli = true
+
+[registries]
+elastio-private = { index = "https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git" }
+

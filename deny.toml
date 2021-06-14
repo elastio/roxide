@@ -7,87 +7,6 @@ unmaintained = "deny"
 yanked = "deny"
 unsound = "deny"
 ignore = [
-    # This crate is pervasive throughout our dependency tree ecosystem,
-    # we can only wait until the world migrates to something maintained
-    #
-    # Original error message:
-    # The [`net2`](https://crates.io/crates/net2) crate has been deprecated
-    # and users are encouraged to considered [`socket2`](https://crates.io/crates/socket2) instead.
-    "RUSTSEC-2020-0016",
-
-    # The blockers for getting rid of `failure` are `lambda_runtime_core v0.1.2` and
-    # `which v3.1.1`.
-    #
-    # Original error message:
-    # The `failure` crate is officially end-of-life: it has been marked as deprecated
-    # by the former maintainer, who has announced that there will be no updates or
-    # maintenance work on it going forward.
-    "RUSTSEC-2020-0036",
-
-    # `time` crate depends on `stdweb` crate. We need to wait for
-    # when `time` crate will be updated
-    #
-    # Original error message:
-    # The author of the `stdweb` crate is unresponsive.
-    "RUSTSEC-2020-0056",
-
-    # `volk`, `elastio` and `s0` crates depend on `pretty_assertions` which depend on `difference` crate.
-    # We need to wait when `difference` crate will be updated
-    #
-    # Original error message:
-    # The author of the `difference` crate is unresponsive.
-    #
-    # Maintained alternatives:
-    #   - [`pretty_assertions`](https://crates.io/crates/pretty_assertions)
-    #   - [`dissimilar`](https://crates.io/crates/dissimilar)
-    #   - [`treediff`](https://crates.io/crates/treediff)
-    #   - [`diffus`](https://crates.io/crates/diffus)
-    "RUSTSEC-2020-0095",
-
-    # We don't manually implement that anywhere, that would be ridiculous
-    # Anyway we should get rid of `failure` crate in our dependency tree
-    #
-    # Original error message:
-    # Safe Rust code can implement malfunctioning `__private_get_type_id__` and cause
-    # type confusion when downcasting, which is an undefined behavior.
-    #
-    # Users who derive `Fail` trait are not affected.
-    "RUSTSEC-2019-0036",
-
-
-    # We don't use `lock_api` crate directly. This old version with the vulnerability
-    # is included thru the old lambda runtime crate. We should update it anyway...
-    #
-    # Original error message:
-    # Affected versions of lock_api had unsound implementations of the `Send` or
-    # `Sync` traits for some guard objects, namely:
-    #
-    # * MappedMutexGuard
-    # * MappedRwLockReadGuard
-    # * MappedRwLockWriteGuard
-    # * RwLockReadGuard
-    # * RwLockWriteGuard
-    #
-    # These guards could allow data races through types that are not safe to `Send`
-    # across thread boundaries in safe Rust code.
-    #
-    # This issue was fixed by changing the trait bounds on the `Mapped` guard types
-    # and removing the `Sync` trait for the `RwLock` guards.
-    "RUSTSEC-2020-0070",
-
-    # `viy` crate depends on `mft` 0.5.3 which depends on `simplelog` 0.7.6
-    # which depends on `term` 0.6.1 which in unmaintained.
-    # Original error message:
-    # The author of the `term` crate does not have time to maintain it and is looking
-    # for a new maintainer.
-    #
-    # Some maintained alternatives you can potentially switch to instead, depending
-    # on your needs:
-    #
-    #   - [`crossterm`](https://github.com/crossterm-rs/crossterm)
-    #   - [`termcolor`](https://crates.io/crates/termcolor)
-    #   - [`yansi`](https://crates.io/crates/yansi)
-    "RUSTSEC-2018-0015",
 ]
 
 # The lint level for crates with security notices. Note that as of
@@ -106,10 +25,8 @@ wildcards = "allow"
 multiple-versions = "deny"
 # FIXME: deduplicate dependencies
 skip = [
-    # cheburashka 2 still uses the old version
-    { name = "darling", version = "0.12.*" },
-    { name = "darling_macro", version = "0.12.*" },
-    { name = "darling_core", version = "0.12.*" },
+    # That's dependence of clap v2.33.3. Need wait for update
+    { name = "strsim", version = "=0.8" },
 
     # `config` and `nom` crates use the old version of this crate
     { name = "arrayvec", version = "0.5.2" },
@@ -121,9 +38,6 @@ skip = [
 # Skips the entire tree of the crate dependencies:
 skip-tree = [
     # { name = "crate_name_here", version = "=0.11.0", depth = 20 },
-
-    # Cheburashka 2 still uses darling 0.12
-    { name = "darling", version = "0.12.*", depth = 20 },
 
     # Cheburashka 2 again
     { name = "pin-project", version = "0.4.*", depth = 20 },
