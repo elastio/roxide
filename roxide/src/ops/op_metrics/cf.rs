@@ -9,7 +9,7 @@ use crate::{Error, Result};
 use cheburashka::logging::{futures::Instrument, prelude::*};
 use cheburashka::metrics::*;
 use lazy_static::lazy_static;
-use strum_macros::{Display, IntoStaticStr};
+use strum::{Display, IntoStaticStr};
 
 #[derive(Copy, Clone, Display, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]

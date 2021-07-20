@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::str::FromStr;
-use strum::EnumProperty;
-use strum_macros::{Display, EnumIter, EnumProperty};
+use strum::{Display, EnumIter, EnumProperty};
 
 cpp! {{
     #include "src/ops/get_prop.h"

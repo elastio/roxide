@@ -296,7 +296,7 @@ impl CompactionJobInfo {
 /// Describes what background operation failed, causing a background error.
 ///
 /// Copy-pasted from `include/rocksdb/listener.h`
-#[derive(Debug, Clone, TryFromPrimitive, strum_macros::Display)]
+#[derive(Debug, Clone, TryFromPrimitive, strum::Display)]
 #[repr(u32)]
 pub enum BackgroundErrorReason {
     Unknown = 0,

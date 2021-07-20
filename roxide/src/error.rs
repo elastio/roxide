@@ -9,7 +9,7 @@ use snafu::{Backtrace, Snafu};
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
-use strum_macros::AsRefStr;
+use strum::AsRefStr;
 
 pub mod prelude {
     pub use super::*;
