@@ -927,6 +927,11 @@ impl Default for DbOptions {
                 //
                 // You can read more about this at
                 // https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter
+                //
+                // TODO: 6.15 adds Ribbon filters (activated by replacing `bloomfilter` with
+                // `ribbonfilter`).  According to the docs this adds a bit of CPU overhead and
+                // reduces memory usage 30% for the same false positive rate as a bloom.  Need to
+                // experiment with this and see if it makes sense for our use case.
                 "filter_policy=bloomfilter:15:false;",
 
                 // https://rocksdb.org/blog/2018/08/23/data-block-hash-index.html

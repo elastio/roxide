@@ -13,7 +13,7 @@ https://github.com/jsgf/rocksdb-sys
 1. `cd` to the `rocksdb` submodule directory where the RocksDB sources are checked out
   1. Update the `rocksdb` submodule to the tag for whatever the new release is.  
   1. ~~In the `rocksdb` subdirectory run `make util/build_version.cc`~~
-     As of 6.20 this no longer works; instead do `make static_lib` instead
+     As of 6.20 this no longer works; instead do `make -j16 static_lib` instead
   1. Run `make unity.cc`
   1. Copy `util/build_version.cc` to the `roxide-librocksdb-sys` crate root directory
 1. `cd` to the `roxide-librocksdb-sys` crate root

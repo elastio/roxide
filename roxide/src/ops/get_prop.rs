@@ -71,6 +71,10 @@ pub enum RocksProperty {
     #[strum(props(type = "string", name = "rocksdb.levelstats"))]
     LevelStats,
 
+    // static const std::string block_cache_entry_stats = "block-cache-entry-stats";
+    #[strum(props(type = "map", name = "rocksdb.block-cache-entry-stats"))]
+    BlockCacheEntryStats,
+
     // static const std::string num_immutable_mem_table = "num-immutable-mem-table";
     #[strum(props(type = "int", name = "rocksdb.num-immutable-mem-table"))]
     NumImmutableMemTable,
@@ -252,6 +256,7 @@ impl RocksProperty {
             CfFileHistogram,
             DbStats,
             LevelStats,
+            BlockCacheEntryStats,
             NumImmutableMemTable,
             NumImmutableMemTableFlushed,
             MemTableFlushPending,

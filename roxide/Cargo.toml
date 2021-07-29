@@ -5,7 +5,7 @@ Elastio's comprehensive Rust bindings for RocksDB.
 
 Builds on a fork of rust-rocksdb, adding support for missing functionality, async, and a lot of Rust conveniences.
 """
-version = "2.0.1-dev"
+version = "2.0.1-dev+rocksdb.6.22.1"
 authors = ["Adam Nelson <adam@elastio.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
