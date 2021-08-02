@@ -199,7 +199,9 @@ fn setup_database_loggers(db: &impl DbLike) {
     })
 }
 
+
 /// Generates a `DBLike` implementation and supporting code for each possible database type
+#[macro_export]
 macro_rules! rocks_db_impl {
     ($name:ident, $cf_name:ident, $handle_type:ty, $handle_rocks_class:ty) => {
         #[derive(Clone)]
@@ -351,6 +353,7 @@ rocks_class!(ColumnFamilyHandle, ffi::rocksdb_column_family_handle_t, ffi::rocks
 pub(crate) mod db;
 pub(crate) mod opt_txdb;
 pub(crate) mod txdb;
+pub(crate) mod maintenance;
 
 // Re-rexport the various db types
 pub use self::{db::*, opt_txdb::*, txdb::*};

@@ -21,6 +21,7 @@ pub(crate) enum ColumnFamilyOperation {
     MultiGetForUpdate,
     AsyncGetForUpdate,
     CompactRange,
+    CompactFiles,
     Delete,
     MultiDelete,
     AsyncDelete,

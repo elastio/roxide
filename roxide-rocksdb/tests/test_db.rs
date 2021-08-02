@@ -1008,3 +1008,66 @@ fn test_snapshot_outlive_db() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/fail/snapshot_outlive_db.rs");
 }
+
+#[test]
+fn test_compact_cf() {
+    let path = DBPath::new("_test_compact_cf");
+    {
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+
+        let cfs = vec!["cf1"];
+        let db = DB::open_cf(&opts, &path, cfs).unwrap();
+
+        let cf1 = db.cf_handle("cf1").unwrap();
+        db.put_cf(cf1, b"k1", b"v1").unwrap();
+        db.put_cf(cf1, b"k2", b"v2").unwrap();
+        db.put_cf(cf1, b"k3", b"v3").unwrap();
+        db.put_cf(cf1, b"k4", b"v4").unwrap();
+        db.put_cf(cf1, b"k5", b"v5").unwrap();
+
+        db.compact_cf(cf1).unwrap();
+    }
+}
+
+#[test]
+fn seek_is_smart() {
+    let path = DBPath::new("_test_compact_cf");
+    {
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+
+        let cfs = vec!["cf1"];
+        let db = DB::open_cf(&opts, &path, cfs).unwrap();
+
+        let cf1 = db.cf_handle("cf1").unwrap();
+        for n in 1..1000000 {
+            db.put_cf(cf1, format!("k{}", n), format!("v{}", n))
+                .unwrap();
+        }
+
+        let start = std::time::Instant::now();
+        let iterator = db.iterator_cf(cf1, IteratorMode::Start);
+
+        for (k, v) in iterator {
+            //println!("{:?}", k);
+        }
+
+        println!(
+            "Iterating over all keys took:{}ms",
+            start.elapsed().as_millis()
+        );
+
+        let start = std::time::Instant::now();
+        let mut iterator = db.raw_iterator_cf(cf1);
+
+        iterator.seek_to_first();
+        let first = iterator.key().unwrap();
+        iterator.seek_to_last();
+        let last_key = iterator.key().unwrap();
+
+        println!("Seek first/last took:{}ms", start.elapsed().as_millis());
+    }
+}

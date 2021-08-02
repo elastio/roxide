@@ -40,7 +40,7 @@ pub use self::{
     all_ops::*,
     begin_tx::BeginTrans,
     checkpoint::CreateCheckpoint,
-    compact::Compact,
+    compact::{Compact, CompactionOptions},
     delete::{Delete, DeleteRange},
     flush::Flush,
     get::{Get, GetForUpdate},

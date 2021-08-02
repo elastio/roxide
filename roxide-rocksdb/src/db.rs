@@ -1274,6 +1274,17 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
         }
     }
 
+    pub fn compact_cf(&self, cf: impl AsColumnFamilyRef + Clone,) -> Result<(), Error> {
+        let mut raw_iterator = self.raw_iterator_cf(cf.clone());
+        raw_iterator.seek_to_first();
+        let first_key = Vec::from(raw_iterator.key().unwrap().clone());
+        raw_iterator.seek_to_last();
+        let last_key = Vec::from(raw_iterator.key().unwrap().clone());
+        self.compact_range_cf(cf, Some(first_key), Some(last_key));
+        Ok(())
+    }
+
+
     /// Same as `compact_range` but with custom options.
     pub fn compact_range_opt<S: AsRef<[u8]>, E: AsRef<[u8]>>(
         &self,

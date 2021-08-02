@@ -4,11 +4,29 @@
 use super::op_metrics;
 use super::*;
 use crate::db::{self, db::*, opt_txdb::*, txdb::*};
-use crate::ffi;
 use crate::handle::{self, RocksObject, RocksObjectDefault};
 use crate::Result;
+use crate::{ffi, RocksIterator};
+use crate::{status, CppStatus};
 use once_cell::sync::OnceCell;
+use std::ffi::CString;
 use std::ptr;
+
+cpp! {{
+    #include "src/ops/compact_files.h"
+    #include "src/ops/compact_files.cpp"
+}}
+
+extern "C" {
+    fn rocksdb_compact_files(
+        db_ptr: *mut libc::c_void,
+        options: *const ffi::rocksdb_compactoptions_t,
+        cf: *const ffi::rocksdb_column_family_handle_t,
+        output_level: u32,
+        file_names: *const *const libc::c_char,
+        fn_len: libc::size_t,
+    ) -> status::CppStatus;
+}
 
 /// The options specific to a `Compact` operation
 ///
@@ -60,7 +78,7 @@ impl handle::RocksObjectDefault<ffi::rocksdb_compactoptions_t> for CompactionOpt
     }
 }
 
-pub trait Compact: RocksOpBase {
+pub trait Compact: RocksOpBase + crate::ops::iterate::IterateAll {
     /// Compacts a a range of keys or all keys in a column family
     fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactionOptions>>>(
         &self,
@@ -74,8 +92,24 @@ pub trait Compact: RocksOpBase {
         cf: &CF,
         options: O,
     ) -> Result<()> {
-        self.compact_range(cf, key_range_all(), options)
+        let mut iterator = self.iterate_all(cf, None)?;
+        unsafe {
+            let start = Vec::from(iterator.get_current()?.unwrap().0);
+            iterator.seek_to_last();
+            let end = Vec::from(iterator.get_current()?.unwrap().0);
+
+            let range = OpenKeyRange::KeysBetween(start, end);
+            self.compact_range(cf, range, options)
+        }
     }
+
+    fn compact_files<CF: db::ColumnFamilyLike, O: Into<Option<CompactionOptions>>>(
+        &self,
+        cf: &CF,
+        file_names: Vec<String>,
+        output_level: u32,
+        options: O,
+    ) -> Result<CppStatus>;
 }
 
 impl Compact for Db {
@@ -110,6 +144,16 @@ impl Compact for Db {
             },
         )
     }
+
+    fn compact_files<CF: db::ColumnFamilyLike, O: Into<Option<CompactionOptions>>>(
+        &self,
+        cf: &CF,
+        file_names: Vec<String>,
+        output_level: u32,
+        options: O,
+    ) -> Result<CppStatus> {
+        unreachable!();
+    }
 }
 
 // I know what you're thinking: "where is the `TransactionDb` impl"?  The Rocks C FFI doesn't have
@@ -132,6 +176,16 @@ impl Compact for TransactionDb {
         _options: O,
     ) -> Result<()> {
         unimplemented!()
+    }
+
+    fn compact_files<CF: db::ColumnFamilyLike, O: Into<Option<CompactionOptions>>>(
+        &self,
+        cf: &CF,
+        file_names: Vec<String>,
+        output_level: u32,
+        options: O,
+    ) -> Result<CppStatus> {
+        unreachable!();
     }
 }
 
@@ -174,6 +228,36 @@ impl Compact for OptimisticTransactionDb {
             },
         )
     }
+
+    fn compact_files<CF: db::ColumnFamilyLike, O: Into<Option<CompactionOptions>>>(
+        &self,
+        cf: &CF,
+        file_names: Vec<String>,
+        output_level: u32,
+        options: O,
+    ) -> Result<CppStatus> {
+        let options = CompactionOptions::from_option(options.into());
+
+        let cs_file_names = file_names
+            .iter()
+            .map(|x| CString::new(x.clone()).unwrap())
+            .collect::<Vec<_>>();
+
+        let znames = cs_file_names.iter().map(|x| x.as_ptr()).collect::<Vec<_>>();
+
+        let status = unsafe {
+            rocksdb_compact_files(
+                self.get_db_ptr(),
+                options.rocks_ptr().as_ptr(),
+                cf.rocks_ptr().as_ptr(),
+                output_level,
+                znames.as_ptr(),
+                file_names.len(),
+            )
+        };
+
+        Ok(status)
+    }
 }
 
 #[cfg(test)]
@@ -193,6 +277,37 @@ mod test {
 
         db.compact_all(&cf, None)?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn opt_txdb_compact_files() -> Result<()> {
+        let path = TempDbPath::new();
+        let db = OptimisticTransactionDb::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+
+        db.put(&cf, "foo", "bar", None)?;
+        db.compact_all(&cf, None)?;
+
+        let live_files = db.get_live_files()?;
+
+        let res = db.compact_files(
+            &cf,
+            live_files
+                .iter()
+                .map(|x| {
+                    x.file_path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect(),
+            6,
+            None,
+        );
+
+        assert!(res.is_ok());
         Ok(())
     }
 

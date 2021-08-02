@@ -40,6 +40,7 @@ namespace rocksdb_hack {
 	struct rocksdb_writeoptions_t    { rocksdb::WriteOptions      rep; };
 	struct rocksdb_options_t         { rocksdb::Options           rep; };
     struct rocksdb_flushoptions_t    { rocksdb::FlushOptions      rep; };
+    struct rocksdb_compactoptions_t  { rocksdb::CompactionOptions rep; };
     }
 }
 
@@ -83,6 +84,10 @@ static rocksdb::FlushOptions* cast_to_flush_options_internal(struct rocksdb_hack
     return &options->rep;
 }
 
+static rocksdb::CompactionOptions* cast_to_compact_options_internal(struct rocksdb_hack::rocksdb_compactoptions_t* options) {
+    return &options->rep;
+}
+
 rocksdb::DB* cast_to_db(::rocksdb_t* db) {
     return cast_to_db_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_t*>(db));
 }
@@ -123,6 +128,10 @@ rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options) 
 
 rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options) {
     return cast_to_flush_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_flushoptions_t*>(options));
+}
+
+rocksdb::CompactionOptions* cast_to_compact_options(::rocksdb_compactoptions_t* options) {
+    return cast_to_compact_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_compactoptions_t*>(options));
 }
 
 rocksdb::Slice string_as_slice(const char* string, size_t len) {

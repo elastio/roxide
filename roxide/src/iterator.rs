@@ -116,6 +116,8 @@ pub trait RocksIterator: Send + 'static {
     /// method.
     fn seek(&mut self, key: impl BinaryStr);
 
+    fn seek_to_last(&mut self);
+
     /// Seeks to the specified key, or the first key that lexicographically precedes it.
     ///
     /// Like ``.seek()`` this method will attempt to seek to the specified key.
@@ -208,6 +210,10 @@ impl RocksIterator for UnboundedIterator {
         self.raw_iter.seek_for_prev(key);
     }
 
+    fn seek_to_last(&mut self) {
+        self.raw_iter.seek_to_last();
+    }
+
     fn valid(&self) -> bool {
         self.raw_iter.valid()
     }
@@ -298,6 +304,10 @@ impl RocksIterator for DbRangeIterator {
 
     fn seek(&mut self, key: impl BinaryStr) {
         self.inner.seek(key);
+    }
+
+    fn seek_to_last(&mut self,) {
+        self.inner.seek_to_last();
     }
 
     fn seek_for_prev(&mut self, key: impl BinaryStr) {
@@ -405,6 +415,10 @@ impl RocksIterator for TransactionRangeIterator {
             "calling `seek` with a key outside the iteration range is undefined"
         );
         self.inner.seek(key);
+    }
+
+    fn seek_to_last(&mut self,) {
+        self.inner.seek_to_last();
     }
 
     fn seek_for_prev(&mut self, key: impl BinaryStr) {
