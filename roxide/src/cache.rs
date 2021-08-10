@@ -22,6 +22,11 @@ impl Drop for CacheInner {
     }
 }
 
+/// Rust assumes that a *mut pointer isn't sync or send, but in our particular case it's a
+/// documented property of RocksDB cache objects that they are fully multi-thread capable
+unsafe impl Sync for CacheInner {}
+unsafe impl Send for CacheInner {}
+
 /// A RocksDB `Cache` impl (currently `LRUCache`) which can be shared between CFs or even between
 /// databases.
 #[derive(Clone)]
