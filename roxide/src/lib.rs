@@ -6,6 +6,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 mod db;
+mod cache;
 mod db_options;
 mod error;
 #[macro_use]
@@ -40,6 +41,7 @@ pub mod future {
 
 // Export the types we want to share from each module here at the root of the crate
 use cheburashka::logging::prelude::*;
+pub use cache::Cache;
 pub use checkpoint::Checkpoint;
 pub use checkpoint::*;
 pub use db::*;
