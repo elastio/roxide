@@ -23,7 +23,8 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 /// Undocumented parameter for `ffi::rocksdb_checkpoint_create` function. Zero by default.
-const LOG_SIZE_FOR_FLUSH: u64 = 0_u64;
+/// Experimental change: set to 20MB
+const LOG_SIZE_FOR_FLUSH: u64 = 20971520_u64;
 
 /// Database's checkpoint object.
 /// Used to create checkpoints of the specified DB from time to time.
