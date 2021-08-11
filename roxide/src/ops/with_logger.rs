@@ -9,19 +9,13 @@ pub(crate) trait WithLogger {
     /// If the object is associated with a C++ RocksDB logger which wraps a Rust implementation in
     /// the form of `RocksDbLogger`, then calls a closure with a reference to that logger, or
     /// `None` if no such logger is configured.
-    fn with_logger<R, F: FnOnce(Option<&Box<dyn RocksDbLogger + 'static>>) -> R>(
-        &self,
-        func: F,
-    ) -> R
+    fn with_logger<R, F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R>(&self, func: F) -> R
     where
         F: std::panic::UnwindSafe;
 }
 
 impl<DB: GetDbPtr> WithLogger for DB {
-    fn with_logger<R, F: FnOnce(Option<&Box<dyn RocksDbLogger + 'static>>) -> R>(
-        &self,
-        func: F,
-    ) -> R
+    fn with_logger<R, F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R>(&self, func: F) -> R
     where
         F: std::panic::UnwindSafe,
     {
@@ -54,10 +48,10 @@ mod tests {
 
         // The same messages entry should be present now.
         #[allow(clippy::borrowed_box)]
-        db.with_logger(|db_logger: Option<&Box<dyn RocksDbLogger + 'static>>| {
-            let db_logger: &Box<dyn RocksDbLogger + 'static> =
+        db.with_logger(|db_logger: Option<&(dyn RocksDbLogger + 'static)>| {
+            let db_logger: &(dyn RocksDbLogger + 'static) =
                 db_logger.expect("Expected a non-None logger");
-            assert_eq!(true, db_logger.include_json_events());
+            assert!(db_logger.include_json_events());
         });
 
         Ok(())

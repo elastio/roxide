@@ -377,6 +377,7 @@ mod test {
     use crate::ops::Get;
     use crate::test::TempDbPath;
     use crate::Result;
+    use std::sync::Arc;
     #[cfg(test)]
     extern crate quickcheck;
 
@@ -424,7 +425,7 @@ mod test {
         options.set_column_family_merge_operator(
             "max",
             "my_max_operator",
-            Box::new(test_merge),
+            Arc::new(test_merge),
             None,
         )?;
         let db = Db::open(&path, options)?;
@@ -467,7 +468,7 @@ mod test {
             options.set_column_family_merge_operator(
                 "max",
                 "my_max_operator",
-                Box::new(test_merge),
+                Arc::new(test_merge),
                 None,
             )?;
             let db = Db::open(&path, options)?;
@@ -489,7 +490,7 @@ mod test {
         options.set_column_family_merge_operator(
             "max",
             "my_max_operator",
-            Box::new(test_merge),
+            Arc::new(test_merge),
             None,
         )?;
         let db = Db::open(&path, options)?;

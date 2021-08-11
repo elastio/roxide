@@ -20,6 +20,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::ffi;
 use std::path::Path;
+use std::sync::Arc;
 
 // In the C++ source file which the cpp macro will generate make sure the relevant includes are
 // present
@@ -102,7 +103,7 @@ private:
 /// If this database doesn't have a configured logger, passes `None` to the closure.
 pub(crate) unsafe fn temp_logger_from_raw_db_ptr<
     R,
-    F: FnOnce(Option<&Box<(dyn RocksDbLogger + 'static)>>) -> R,
+    F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R,
 >(
     db_ptr: *mut std::ffi::c_void,
     func: F,
@@ -514,17 +515,21 @@ impl CppLoggerWrapper {
     /// this pointer isn't valid you'll get nasty UBF), and passes that boxed logger to a closure.
     ///
     /// This closure can call methods on that logger but it cannot take ownership.
-    pub(crate) unsafe fn with_raw_boxed_logger<
-        R,
-        F: FnOnce(&Box<(dyn RocksDbLogger + 'static)>) -> R,
-    >(
+    pub(crate) unsafe fn with_raw_boxed_logger<R, F: FnOnce(&(dyn RocksDbLogger + 'static)) -> R>(
         logger_ptr: *mut std::ffi::c_void,
         func: F,
     ) -> R
     where
         F: std::panic::UnwindSafe,
     {
-        Self::temp_from_raw_void(logger_ptr, move |wrapper| wrapper.with_inner(func))
+        Self::temp_from_raw_void(logger_ptr, move |wrapper| {
+            wrapper.with_inner(|inner: &Arc<_>| {
+                use std::ops::Deref;
+                let logger: &(dyn RocksDbLogger + 'static) = inner.deref();
+
+                func(logger)
+            })
+        })
     }
 }
 

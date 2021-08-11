@@ -213,18 +213,18 @@ pub struct DbOptions {
         String,
         (
             String,
-            Box<dyn merge::MergeFn>,
-            Option<Box<dyn merge::MergeFn>>,
+            Arc<dyn merge::MergeFn>,
+            Option<Arc<dyn merge::MergeFn>>,
         ),
     >,
 
     /// An optional event listener which will receive various RocksDB notifications
     #[serde(skip)]
-    event_listener: Option<Box<dyn events::RocksDbEventListener>>,
+    event_listener: Option<Arc<dyn events::RocksDbEventListener>>,
 
     /// An optional logger which will be passed all RocksDB log messages at or above `log_level`
     #[serde(skip)]
-    logger: Option<Box<dyn logging::RocksDbLogger>>,
+    logger: Option<Arc<dyn logging::RocksDbLogger>>,
 
     /// The RocksDB internal log level, controlling what level of log messages get passed to
     /// `logger`.  If `logger` is `None`, this option has no effect
@@ -545,8 +545,8 @@ impl DbOptions {
         &mut self,
         cf_name: impl ToString,
         operator_name: impl ToString,
-        full_merge_fn: Box<dyn merge::MergeFn>,
-        partial_merge_fn: Option<Box<dyn merge::MergeFn>>,
+        full_merge_fn: Arc<dyn merge::MergeFn>,
+        partial_merge_fn: Option<Arc<dyn merge::MergeFn>>,
     ) -> Result<()> {
         let cf_name = cf_name.to_string();
         if self.column_families.get(&cf_name).is_none() {
@@ -566,7 +566,7 @@ impl DbOptions {
 
     /// Sets an optional event listener which will receive events about RocksDB internal operations
     pub fn set_event_listener(&mut self, listener: impl events::RocksDbEventListener + 'static) {
-        self.event_listener = Some(Box::new(listener));
+        self.event_listener = Some(Arc::new(listener));
     }
 
     /// Sets the logger which will receive all of the RocksDB log messages corresponding to `level`
@@ -575,7 +575,7 @@ impl DbOptions {
         level: log::LevelFilter,
         logger: impl logging::RocksDbLogger + 'static,
     ) {
-        self.logger = Some(Box::new(logger));
+        self.logger = Some(Arc::new(logger));
         self.log_level = level;
     }
 
@@ -587,7 +587,7 @@ impl DbOptions {
         logger: impl logging::RocksDbLogger + 'static,
     ) {
         if self.logger.is_none() {
-            self.logger = Some(Box::new(logger));
+            self.logger = Some(Arc::new(logger));
             self.log_level = level;
         }
     }
@@ -1252,7 +1252,7 @@ pub trait OptionsExt {
     /// The specified `level` is the minimum level that will be logged.  Log events below this
     /// level will be skipped at the source level and thus incur almost no overhead.  Log events at
     /// this level or above will be passed to the logging trait.
-    fn set_logger(&mut self, min_level: log::Level, logger: Box<dyn logging::RocksDbLogger>);
+    fn set_logger(&mut self, min_level: log::Level, logger: Arc<dyn logging::RocksDbLogger>);
 
     fn inner_logger(&self) -> *mut ffi::rocksdb_options_t;
 
@@ -1260,10 +1260,7 @@ pub trait OptionsExt {
     /// that impl to a closure for additional customization.
     ///
     /// If there is no logger configured, `None` is passed to the closure.
-    fn with_logger<R, F: FnOnce(Option<&Box<dyn logging::RocksDbLogger>>) -> R>(
-        &mut self,
-        func: F,
-    ) -> R
+    fn with_logger<R, F: FnOnce(Option<&dyn logging::RocksDbLogger>) -> R>(&mut self, func: F) -> R
     where
         F: std::panic::UnwindSafe,
     {
@@ -1295,7 +1292,7 @@ pub trait OptionsExt {
     }
 
     /// Sets an event listener to be notified of RocksDB internal events
-    fn set_event_listener(&mut self, listener: Box<dyn events::RocksDbEventListener>);
+    fn set_event_listener(&mut self, listener: Arc<dyn events::RocksDbEventListener>);
 
     /// Sets default crc32 checksum generator factory
     fn set_default_checksum_gen_factory(&mut self);
@@ -1445,7 +1442,7 @@ impl OptionsExt for Options {
         Ok(())
     }
 
-    fn set_logger(&mut self, min_level: log::Level, logger: Box<dyn logging::RocksDbLogger>) {
+    fn set_logger(&mut self, min_level: log::Level, logger: Arc<dyn logging::RocksDbLogger>) {
         let logger = logging::CppLoggerWrapper::wrap(logger);
 
         let options_ptr = self.inner;
@@ -1469,7 +1466,7 @@ impl OptionsExt for Options {
     }
 
     /// Sets an event listener to be notified of RocksDB internal events
-    fn set_event_listener(&mut self, listener: Box<dyn events::RocksDbEventListener>) {
+    fn set_event_listener(&mut self, listener: Arc<dyn events::RocksDbEventListener>) {
         let listener = events::CppListenerWrapper::wrap(listener);
 
         let options_ptr = self.inner;
@@ -1608,7 +1605,7 @@ mod tests {
         options.set_column_family_merge_operator(
             "bar",
             "my_operator",
-            Box::new(|_, _, _| None),
+            Arc::new(|_, _, _| None),
             None,
         )?;
         let json = serde_json::to_string(&options).unwrap();
