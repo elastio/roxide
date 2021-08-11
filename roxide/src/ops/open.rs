@@ -1,18 +1,18 @@
 // editorconfig-checker-disable-file
 // Reason: rustfmt formats closures with overly long parameter list
 // not on the 4-character indentation boundary :(
-use std::collections::HashMap;
-use std::ffi::CString;
-use std::fs;
-use std::path::Path;
-use std::ptr;
-
 use crate::db::{db::*, opt_txdb::*, txdb::*, ColumnFamilyHandle};
 use crate::db_options::prelude::*;
 use crate::error::prelude::*;
 use crate::ffi;
 use crate::ffi_try;
 use crate::ffi_util::{path_to_cstring, path_to_string};
+use crate::Cache;
+use std::collections::HashMap;
+use std::ffi::CString;
+use std::fs;
+use std::path::Path;
+use std::ptr;
 
 pub trait DbOpen: Sized {
     /// Open a RocksDB database at a given path.  This might or might not exist, and might or might
@@ -89,9 +89,9 @@ impl DbOpen for Db {
         // Set up a default logger if there isn't already one
 
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
 
-        Ok(Db::new(path, DbHandle::new(db_ptr), cfs))
+        Ok(Db::new(path, DbHandle::new(db_ptr), cache, db_options, cfs))
     }
 }
 
@@ -108,7 +108,7 @@ impl DbOpenReadOnly for Db {
         O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cfs) = ffi_open_helper(
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(
             &path,
             db_options,
             |options,
@@ -131,7 +131,7 @@ impl DbOpenReadOnly for Db {
             },
         )?;
 
-        Ok(Db::new(path, DbHandle::new(db_ptr), cfs))
+        Ok(Db::new(path, DbHandle::new(db_ptr), cache, db_options, cfs))
     }
 }
 
@@ -150,7 +150,7 @@ impl DbOpen for TransactionDb {
         O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cfs) = ffi_open_helper(
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(
             &path,
             db_options,
             |options,
@@ -206,6 +206,8 @@ impl DbOpen for TransactionDb {
         Ok(TransactionDb::new(
             path,
             TransactionDbHandle::new(db_ptr),
+            cache,
+            db_options,
             cfs,
         ))
     }
@@ -218,11 +220,13 @@ impl DbOpen for OptimisticTransactionDb {
         O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
 
         Ok(OptimisticTransactionDb::new(
             path,
             OptimisticTransactionDbHandle::new(db_ptr),
+            cache,
+            db_options,
             cfs,
         ))
     }
@@ -232,11 +236,16 @@ impl DbOpen for OptimisticTransactionDb {
 /// enough that it requires some customization.  This helper implements the part that's the same
 /// for all, which is mostly concerned with re-shaping the Rust types into C types, and then
 /// converting the C output back to Rust.
-fn ffi_open_helper<DB, P, O, F>(
+pub(crate) fn ffi_open_helper<DB, P, O, F>(
     path: P,
     db_options: O,
     opener: F,
-) -> Result<(ptr::NonNull<DB>, HashMap<String, ColumnFamilyHandle>)>
+) -> Result<(
+    ptr::NonNull<DB>,
+    Cache,
+    DbOptions,
+    HashMap<String, ColumnFamilyHandle>,
+)>
 where
     P: AsRef<Path>,
     O: Into<Option<DbOptions>>,
@@ -257,8 +266,8 @@ where
     // caller hasn't overridden the logging impl.
     ensure_logging_configured(path.as_ref(), &mut db_options);
 
-    // From the DBOptions make the RocksDB `Options` struct and column family descriptors
-    let (options, cfs) = db_options.into_components()?;
+    // From the DBOptions make the RocksDB components
+    let components = db_options.clone().into_components()?;
 
     fs::create_dir_all(&path).context(PathMkdirFailed {
         path: path.as_ref().to_owned(),
@@ -268,7 +277,8 @@ where
 
     // We need to store our CStrings in an intermediate vector
     // so that their pointers remain valid.
-    let c_cf_names: Vec<CString> = cfs
+    let c_cf_names: Vec<CString> = components
+        .column_families
         .iter()
         .map(|cf| CString::new(cf.name.as_bytes()).unwrap())
         .collect();
@@ -276,14 +286,18 @@ where
     let mut c_cf_name_ptrs: Vec<_> = c_cf_names.iter().map(|name| name.as_ptr()).collect();
 
     // These handles will be populated by DB.
-    let mut cf_handle_ptrs: Vec<_> = vec![ptr::null_mut(); cfs.len()];
+    let mut cf_handle_ptrs: Vec<_> = vec![ptr::null_mut(); components.column_families.len()];
 
-    let mut cfopt_ptrs: Vec<_> = cfs.iter().map(|cf| cf.options.inner as *const _).collect();
+    let mut cfopt_ptrs: Vec<_> = components
+        .column_families
+        .iter()
+        .map(|cf| cf.options.inner as *const _)
+        .collect();
 
     let db = opener(
-        options.inner,
+        components.options.inner,
         cpath.as_ptr(),
-        cfs.len() as libc::c_int,
+        components.column_families.len() as libc::c_int,
         c_cf_name_ptrs.as_mut_ptr(),
         cfopt_ptrs.as_mut_ptr(),
         cf_handle_ptrs.as_mut_ptr(),
@@ -296,7 +310,7 @@ where
     // way
     let cf_results: Vec<Result<_>> = cf_handle_ptrs
         .into_iter()
-        .zip(cfs.into_iter())
+        .zip(components.column_families.into_iter())
         .map(
             |(cf_handle, cf_descriptor)| match ptr::NonNull::new(cf_handle) {
                 None => DatabaseError {
@@ -313,7 +327,12 @@ where
     let cf_results: Result<Vec<_>> = cf_results.into_iter().collect();
     let cf_results = cf_results?;
 
-    Ok((db, cf_results.into_iter().collect()))
+    Ok((
+        db,
+        components.block_cache,
+        db_options,
+        cf_results.into_iter().collect(),
+    ))
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ mod logging;
 mod mem;
 mod merge;
 mod metrics;
-mod ops;
+pub(crate) mod ops;
 mod perf;
 mod stats;
 mod status;

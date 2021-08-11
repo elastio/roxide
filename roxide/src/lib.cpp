@@ -43,6 +43,9 @@ namespace rocksdb_hack {
         struct rocksdb_cache_t {
           std::shared_ptr<rocksdb::Cache> rep;
         };
+        struct rocksdb_checkpoint_t {
+            rocksdb::Checkpoint* rep;
+        };
     }
 }
 
@@ -131,6 +134,11 @@ rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options) 
 rocksdb::Cache* cast_to_cache(::rocksdb_cache_t* cache) {
     auto casted_cache = reinterpret_cast<struct rocksdb_hack::rocksdb_cache_t*>(cache);
     return casted_cache->rep.get();
+}
+
+rocksdb::Checkpoint* cast_to_checkpoint(::rocksdb_checkpoint_t* checkpoint) {
+    auto casted_checkpoint = reinterpret_cast<struct rocksdb_hack::rocksdb_checkpoint_t*>(checkpoint);
+    return casted_checkpoint->rep;
 }
 
 ::rocksdb_cache_t* wrap_cache(std::shared_ptr<rocksdb::Cache> cache) {

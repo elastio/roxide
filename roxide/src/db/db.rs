@@ -14,10 +14,13 @@ impl Db {
         path: P,
     ) -> Result<()> {
         let db_options = db_options.into().unwrap_or_default();
-        let (options, _) = db_options.into_components()?;
+        let components = db_options.into_components()?;
         let cpath = path_to_cstring(path)?;
         unsafe {
-            ffi_try!(ffi::rocksdb_destroy_db(options.inner, cpath.as_ptr(),))?;
+            ffi_try!(ffi::rocksdb_destroy_db(
+                components.options.inner,
+                cpath.as_ptr(),
+            ))?;
         }
         Ok(())
     }

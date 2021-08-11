@@ -59,71 +59,79 @@ where
             self,
             op_metrics::DatabaseOperation::GetLiveFiles,
             move || {
-                let mut files = Vec::new();
-                let files_vec_ptr: *mut Vec<SstFile> = &mut files;
                 let db_ptr = self.get_db_ptr();
-
-                unsafe {
-                    cpp!([db_ptr as "rocksdb::DB*", files_vec_ptr as "void*"] {
-                        std::vector<rocksdb::LiveFileMetaData> live_files;
-
-                        db_ptr->GetLiveFilesMetaData(&live_files);
-
-                        for (auto iterator=live_files.begin(); iterator != live_files.end(); iterator++) {
-                            auto column_family_name_ptr = iterator->column_family_name.c_str();
-                            auto level = iterator->level;
-                            auto db_path = iterator->db_path.c_str();
-                            auto file_name = iterator->name.c_str();
-                            auto file_number = iterator->file_number;
-                            auto file_size = iterator->size;
-                            auto oldest_ancester_time = iterator->oldest_ancester_time;
-                            auto file_creation_time = iterator->file_creation_time;
-
-                            // Default CRC32c checksum generator stores checksum inside std::string
-                            // using reinterpret_cast, so we can't convert it to rust string using
-                            // to_string_lossy(), because it will replace invalid UTF-8 characters
-                            uint32_t file_checksum_uint = iterator->file_checksum.length() == 4
-                                ? *reinterpret_cast<const uint32_t*>(iterator->file_checksum.data())
-                                : 0u;
-
-                            // For some reason, `file_name` always starts with a leading `/`, even though
-                            // it's meant to be the path relative to db_path.  Fix that in C++ where
-                            // anything goes.
-                            if (file_name[0] == '/') {
-                                file_name++;
-                            }
-
-                            rust!(GetLiveFiles_add_to_dev [
-                                files_vec_ptr: *mut Vec<SstFile> as "void*",
-                                column_family_name_ptr: *const libc::c_char as "const char*",
-                                level: libc::c_int as "int",
-                                db_path: *const libc::c_char as "const char*",
-                                file_name: *const libc::c_char as "const char*",
-                                file_number: u64 as "uint64_t",
-                                file_size: libc::size_t as "size_t",
-                                oldest_ancester_time: u64 as "uint64_t",
-                                file_creation_time: u64 as "uint64_t",
-                                file_checksum_uint: u32 as "uint32_t"
-                            ] {
-                                (*files_vec_ptr).push( SstFile {
-                                    column_family_name: ffi_util::string_from_char_ptr(column_family_name_ptr),
-                                    level: level as _,
-                                    file_path: ffi_util::path_from_char_ptr(db_path).join(ffi_util::path_from_char_ptr(file_name)),
-                                    file_number: file_number as _,
-                                    file_size: file_size as _,
-                                    oldest_ancestor_time: oldest_ancester_time as _,
-                                    file_creation_time: file_creation_time as _,
-                                    crc32c_checksum: file_checksum_uint as _
-                                })
-                            });
-                        }
-                    });
-                }
-
-                Ok(files)
+                unsafe { get_live_files_impl(db_ptr) }
             },
         )
     }
+}
+
+/// Given a pointer to a RocksDB C++ `DB` object, get the metadata for the live files actively in
+/// use by the database.
+///
+/// We need a way to invoke this without a Rust `Db` instance to support
+/// [`crate::Checkpoint::get_files`] which doesn't go through the Rust wrapper for maximum
+/// performance.
+pub(crate) unsafe fn get_live_files_impl(db_ptr: *mut libc::c_void) -> Result<Vec<SstFile>> {
+    let mut files = Vec::new();
+    let files_vec_ptr: *mut Vec<SstFile> = &mut files;
+
+    cpp!([db_ptr as "rocksdb::DB*", files_vec_ptr as "void*"] {
+        std::vector<rocksdb::LiveFileMetaData> live_files;
+
+        db_ptr->GetLiveFilesMetaData(&live_files);
+
+        for (auto iterator=live_files.begin(); iterator != live_files.end(); iterator++) {
+            auto column_family_name_ptr = iterator->column_family_name.c_str();
+            auto level = iterator->level;
+            auto db_path = iterator->db_path.c_str();
+            auto file_name = iterator->name.c_str();
+            auto file_number = iterator->file_number;
+            auto file_size = iterator->size;
+            auto oldest_ancester_time = iterator->oldest_ancester_time;
+            auto file_creation_time = iterator->file_creation_time;
+
+            // Default CRC32c checksum generator stores checksum inside std::string
+            // using reinterpret_cast, so we can't convert it to rust string using
+            // to_string_lossy(), because it will replace invalid UTF-8 characters
+            uint32_t file_checksum_uint = iterator->file_checksum.length() == 4
+                ? *reinterpret_cast<const uint32_t*>(iterator->file_checksum.data())
+                : 0u;
+
+            // For some reason, `file_name` always starts with a leading `/`, even though
+            // it's meant to be the path relative to db_path.  Fix that in C++ where
+            // anything goes.
+            if (file_name[0] == '/') {
+                file_name++;
+            }
+
+            rust!(GetLiveFiles_add_to_dev [
+                files_vec_ptr: *mut Vec<SstFile> as "void*",
+                column_family_name_ptr: *const libc::c_char as "const char*",
+                level: libc::c_int as "int",
+                db_path: *const libc::c_char as "const char*",
+                file_name: *const libc::c_char as "const char*",
+                file_number: u64 as "uint64_t",
+                file_size: libc::size_t as "size_t",
+                oldest_ancester_time: u64 as "uint64_t",
+                file_creation_time: u64 as "uint64_t",
+                file_checksum_uint: u32 as "uint32_t"
+            ] {
+                (*files_vec_ptr).push( SstFile {
+                    column_family_name: ffi_util::string_from_char_ptr(column_family_name_ptr),
+                    level: level as _,
+                    file_path: ffi_util::path_from_char_ptr(db_path).join(ffi_util::path_from_char_ptr(file_name)),
+                    file_number: file_number as _,
+                    file_size: file_size as _,
+                    oldest_ancestor_time: oldest_ancester_time as _,
+                    file_creation_time: file_creation_time as _,
+                    crc32c_checksum: file_checksum_uint as _
+                })
+            });
+        }
+    });
+
+    Ok(files)
 }
 
 #[cfg(test)]

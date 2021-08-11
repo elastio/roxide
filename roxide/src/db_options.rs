@@ -105,18 +105,30 @@ pub const DEFAULT_CF_NAME: &str = "default";
 /// A description of the column family, containing the name and `Options`.
 pub struct ColumnFamilyDescriptor {
     pub(crate) name: String,
+    /// The column-family level RocksDB `Options` struct which overrides the database-level
+    /// `Options`
     pub(crate) options: Options,
+
+    /// The block cache used by this CF.
+    ///
+    /// This may be a unique cache specific to the CF, or it may be a clone of the DB-level cache
+    /// in [`DbComponents::block_cache`], depending upon the [`DbOptions`] config which produces
+    /// this descriptor.
+    #[allow(dead_code)]
+    // This is going to be used in the future to report per-CF block cache stats
+    pub(crate) block_cache: Cache,
 }
 
 impl ColumnFamilyDescriptor {
     /// Create a new column family descriptor with the specified name and options.
-    pub fn new<S>(name: S, options: Options) -> Self
+    pub fn new<S>(name: S, options: Options, block_cache: Cache) -> Self
     where
         S: Into<String>,
     {
         ColumnFamilyDescriptor {
             name: name.into(),
             options,
+            block_cache,
         }
     }
 
@@ -124,6 +136,24 @@ impl ColumnFamilyDescriptor {
     pub fn name(&self) -> &str {
         &self.name
     }
+}
+
+/// The components necessary to create or open a RocksDB database
+///
+/// This is created from a [`DbOptions`] struct using [`DbOptions::into_components`], and contains
+/// all of the lower-level structures and configuration needed to use `roxide-rocksdb` to open a
+/// RocksDB database with configuration options as they were specified in the source `DbOptions`
+/// instance
+pub(crate) struct DbComponents {
+    /// The database options struct (called `Options` because confusingly that's what the RocksDB
+    /// C++ API uses)
+    pub options: rocksdb::Options,
+
+    /// The default block cache used by the entire database.
+    pub block_cache: Cache,
+
+    /// The column families in the DB, each with their own config
+    pub column_families: Vec<ColumnFamilyDescriptor>,
 }
 
 /// Struct that contains all of the information about a database other than it's path.  Not to be
@@ -164,7 +194,7 @@ impl ColumnFamilyDescriptor {
 /// `block_based_table_factory` value, then RocksDB will allocate a dedicated block cache for that
 /// column family, which will be unique to that CF and cannot be shared with other databases in the
 /// process.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DbOptions {
     /// Database-wide options
     db_options: HashMap<String, String>,
@@ -393,6 +423,40 @@ impl DbOptions {
         self.default_block_cache = Some(cache);
     }
 
+    /// Forcibly set `cache` as the block cache for this database, removing any column
+    /// family-specific block cache instances or options.
+    ///
+    /// After this is called, it's guaranteed that all column families will use the specified cache
+    /// and no other block cache will be in use.
+    pub fn force_block_cache(&mut self, cache: Cache) {
+        // First set this as the default
+        self.set_default_block_cache(cache);
+
+        // Now clear all CF-specific caches
+        self.column_family_block_caches.clear();
+
+        // And clear any `block_cache` options from the default and per-CF options maps
+        let mut default_block_options = self.get_default_cf_block_table_options();
+        default_block_options.remove("block_cache");
+        self.set_default_cf_block_table_options(default_block_options);
+
+        // Note the need to make owned copies of all of the CF names so that we can mutate `self`
+        // inside the loop
+        for name in self
+            .column_families
+            .keys()
+            .map(|k| k.to_owned())
+            .collect::<Vec<_>>()
+        {
+            let mut block_options = self
+                .get_column_family_block_table_options(&name)
+                .expect("BUG: This CF is known to be presenet");
+            block_options.remove("block_cache");
+            self.set_column_family_block_table_options(name, block_options)
+                .expect("BUG: This CF is known to be presenet");
+        }
+    }
+
     pub fn set_stats_level(&mut self, level: StatsLevel) {
         self.stats_level = level;
     }
@@ -492,10 +556,14 @@ impl DbOptions {
     {
         let cf_name = cf_name.to_string();
         if let Some(cf_opts) = self.column_families.get_mut(&cf_name) {
-            cf_opts.insert(
-                "block_based_table_factory".to_string(),
-                Self::build_options_string(options),
-            );
+            if !options.borrow().is_empty() {
+                cf_opts.insert(
+                    "block_based_table_factory".to_string(),
+                    Self::build_options_string(options),
+                );
+            } else {
+                cf_opts.remove("block_based_table_factory");
+            }
 
             Ok(())
         } else {
@@ -593,49 +661,29 @@ impl DbOptions {
     }
 
     /// Once the options are set correctly, this method is called to consume the struct and convert
-    /// it into a `Options` struct with the database options, and a vector of
+    /// it into the raw components needed to create or open a RocksDB database with the underlying
+    /// `roxide-rocksdb` crate.
+    ///
+    /// a `Options` struct with the database options, and a vector of
     /// `ColumnFamilyDescriptor` struct with the name and options of each column family.  This is
     /// the representation which RocksDB needs to operate on.
-    pub fn into_components(mut self) -> Result<(Options, Vec<ColumnFamilyDescriptor>)> {
+    pub(crate) fn into_components(mut self) -> Result<DbComponents> {
+        // Immediately, make sure that there is a specific `Cache` instance for the DB and every
+        // CF, removing any explicit `block_cache` options parameter in the process.
+        //
+        // After this, `self.default_block_cache` is guaranteed non-None, and there is guaranteed
+        // to be a specific `Cache` in `self.column_family_block_caches` for every CF except for
+        // default.
+        self.instantiate_block_caches()?;
+
+        let default_block_options = self.get_default_cf_block_table_options();
+        let default_block_cache = self
+            .default_block_cache
+            .expect("BUG: instantiate_block_caches should have created a block cache already");
+
         let opts = Options::default();
 
         // Apply the DB and defualt CF options directly to this `Options` struct
-
-        // Determine the default block options and block cache to apply to CFs for which a specific
-        // block options override is not provided.
-        let mut default_block_options = self.get_default_cf_block_table_options();
-
-        // Create a block cache for the database, explicitly.
-        //
-        // Note that RocksDB will make one automatically, but if Rocks does that we won't be able
-        // to get a hold of it, which means we can't ensure that other CFs re-use the same default
-        // block cache.  By always creating it explicitly, we always have a `Cache` object we can
-        // pass to the C++ BlockBasedOptions` for non-default CFs
-        let default_block_cache = if let Some(cache) = self.default_block_cache.clone() {
-            // A concrete `Cache` instance takes priority over a blockc ache setting in the block
-            // table options
-            if let Some(overridden_cache) = default_block_options.remove("block_cache") {
-                warn!(actual_default_block_cache = ?cache,
-                    overridden_block_cache = %overridden_cache,
-                    "The `block_cache` parameter in the default ColumnFamily options is being overriden by a `Cache` object passed at runtime");
-            }
-
-            cache
-        } else {
-            // Else caller didn't set a default block cache, so create a block cache object now
-            if let Some(block_cache) = default_block_options.remove("block_cache") {
-                // The default CF options have a `block_cache` value set, so use this to make the
-                // default cache
-                Cache::from_string(block_cache)?
-            } else {
-                // No block cache is set at all, so use the hard-coded default
-                Cache::from_string(DEFAULT_BLOCK_CACHE)?
-            }
-        };
-
-        // the above logic can modify the default block table options, so persist those changes
-        self.set_default_cf_block_table_options(default_block_options.clone());
-
         let mut opts = opts.set_db_options_from_map(&self.db_options)?;
         if let Some(db_path) = self.db_path.as_ref() {
             opts.set_db_path(db_path)?;
@@ -678,10 +726,6 @@ impl DbOptions {
             }
         }
 
-        let mut merge_operators = self.merge_operators;
-        let column_family_paths = self.column_family_paths;
-        let column_family_block_caches = self.column_family_block_caches;
-
         // Callers should not generally create an explicit CF called `default`.  The `default` CF
         // always exists in all RocksDB databases, whether we add it or not.  However, for
         // consistency and to avoid special-casing code elsewhere related to this column group,
@@ -696,6 +740,12 @@ impl DbOptions {
 
         self.column_families
             .insert(DEFAULT_CF_NAME.to_string(), HashMap::new());
+        self.column_family_block_caches
+            .insert(DEFAULT_CF_NAME.to_string(), default_block_cache.clone());
+
+        let mut merge_operators = self.merge_operators;
+        let column_family_paths = self.column_family_paths;
+        let mut column_family_block_caches = self.column_family_block_caches;
 
         // Create `ColumnFamilyDescriptor`s for every additional column family
         // If there were any errors, return the first one
@@ -715,30 +765,12 @@ impl DbOptions {
                         }
                     };
 
-                    // If there's an explicit block cache for this CF, use that
-                    let block_cache_option = cf_block_options.remove("block_cache");
-                    let block_cache = if let Some(block_cache) = column_family_block_caches.get(&name) {
-                        if let Some(overridden_cache) = block_cache_option {
-                            // The block based table options included a `block_cache` option but
-                            // that's being overridden by a specific block cache specified at
-                            // runtime.  That's fine but make sure the user knows
-                            warn!(actual_default_block_cache = ?default_block_cache,
-                                overridden_block_cache = %overridden_cache,
-                                column_family = %name,
-                                "The `block_cache` parameter is being overriden by a `Cache` object passed at runtime");
-                        }
-
-                        block_cache.clone()
-                    } else if let Some(block_cache) = block_cache_option {
-                        // No concrete `Cache` instance was provided for this CF, but it's
-                        // `block_based_table_factory` options include an explicit `block_cache`
-                        // directive so it should get its own block cache
-                        Cache::from_string(block_cache)?
-                    } else {
-                        // No explicit Cache and no `block_cache` directive in the CF options, so
-                        // just use the default cache
-                        default_block_cache.clone()
-                    };
+                    // There is guaranteed to be a Cache object for every CF after
+                    // `instantiate_block_caches` was called
+                    let block_cache = column_family_block_caches
+                        .get(&name)
+                        .cloned()
+                        .expect("BUG: instantiate_block_caches should have set this");
 
                     // Put back whatever options are left after removing `block_cache`
                     if !cf_block_options.is_empty() {
@@ -801,10 +833,117 @@ impl DbOptions {
 
         let cf_descriptors: Vec<_> = cfs
             .into_iter()
-            .map(|(name, options)| ColumnFamilyDescriptor::new(name, options))
+            .map(|(name, options)| {
+                let block_cache = column_family_block_caches
+                    .remove(&name)
+                    .expect("BUG: instantiate_block_caches should have set this");
+                ColumnFamilyDescriptor::new(name, options, block_cache)
+            })
             .collect();
 
-        Ok((opts, cf_descriptors))
+        Ok(DbComponents {
+            options: opts,
+            block_cache: default_block_cache,
+            column_families: cf_descriptors,
+        })
+    }
+
+    /// Process the default CF settings and every per-CF setting, setting a specific `Cache`
+    /// instance at the database level as well as every CF.
+    ///
+    /// After this completes, any `block_cache` option from the option maps will be removed, and
+    /// there will be a concrete `Cache` instance set in `default_block_cache`, and each column
+    /// family will also have a specific `Cache` instance assigned.  The default behavior if no
+    /// cache settings were present in the options will be for all of those `Cache` instances to be
+    /// clones of one single database-wide cache, however any existing `Cache` objects set at the
+    /// DB or CF level, and any `block_cache` directives in the options, will be honored if
+    /// present.
+    fn instantiate_block_caches(&mut self) -> Result<()> {
+        // Read the default CF block table options, removing `block_cache` if present, and then
+        // re-write
+        let mut default_block_options = self.get_default_cf_block_table_options();
+        let block_cache_option = default_block_options.remove("block_cache");
+        self.set_default_cf_block_table_options(default_block_options.clone());
+
+        // Create a block cache for the database, explicitly.
+        //
+        // Note that RocksDB will make one automatically, but if Rocks does that we won't be able
+        // to get a hold of it, which means we can't ensure that other CFs re-use the same default
+        // block cache.  By always creating it explicitly, we always have a `Cache` object we can
+        // pass to the C++ BlockBasedOptions` for non-default CFs
+        let default_block_cache = if let Some(cache) = self.default_block_cache.as_ref() {
+            // A concrete `Cache` instance takes priority over a block_cache setting in the block
+            // table options
+            if let Some(overridden_cache) = block_cache_option {
+                warn!(actual_default_block_cache = ?cache,
+                    overridden_block_cache = %overridden_cache,
+                    "The `block_cache` parameter in the default ColumnFamily options is being overriden by a `Cache` object passed at runtime");
+            }
+
+            cache.clone()
+        } else {
+            // Else caller didn't set a default block cache, so create a block cache object now
+            let new_cache = if let Some(block_cache) = block_cache_option {
+                // The default CF options have a `block_cache` value set, so use this to make the
+                // default cache
+                debug!(%block_cache, "Creating the default database block cache from a `block_cache` option");
+                Cache::from_string(block_cache)?
+            } else {
+                // No block cache is set at all, so use the hard-coded default
+                debug!(
+                    block_cache = DEFAULT_BLOCK_CACHE,
+                    "Creating the default database block cache using hard-coded default"
+                );
+                Cache::from_string(DEFAULT_BLOCK_CACHE)?
+            };
+
+            self.default_block_cache = Some(new_cache.clone());
+
+            new_cache
+        };
+
+        // Now apply much the same logic but for every CF
+        // Note the need to make owned copies of all of the CF names so that we can mutate `self`
+        // inside the loop
+        for name in self
+            .column_families
+            .keys()
+            .map(|k| k.to_owned())
+            .collect::<Vec<_>>()
+        {
+            let mut block_table_options = self.get_column_family_block_table_options(&name)?;
+            let block_cache_option = block_table_options.remove("block_cache");
+            self.set_column_family_block_table_options(&name, block_table_options)?;
+
+            if let Some(block_cache) = self.column_family_block_caches.get(&name) {
+                if let Some(overridden_cache) = block_cache_option {
+                    // The block based table options included a `block_cache` option but
+                    // that's being overridden by a specific block cache specified at
+                    // runtime.  That's fine but make sure the user knows
+                    warn!(actual_block_cache = ?block_cache,
+                                overridden_block_cache = %overridden_cache,
+                                column_family = %name,
+                                "The column family `block_cache` parameter is being overriden by a `Cache` object passed at runtime");
+                }
+            } else {
+                let cf_block_cache = if let Some(block_cache) = block_cache_option {
+                    // No concrete `Cache` instance was provided for this CF, but it's
+                    // `block_based_table_factory` options include an explicit `block_cache`
+                    // directive so it should get its own block cache
+                    debug!(%block_cache,
+                            column_family = %name,
+                            "Creating column family block cache based on `block_cache` parameter");
+                    Cache::from_string(block_cache)?
+                } else {
+                    // No explicit Cache and no `block_cache` directive in the CF options, so
+                    // just use the default cache
+                    default_block_cache.clone()
+                };
+                self.column_family_block_caches.insert(name, cf_block_cache);
+            };
+        }
+
+        Ok(())
     }
 
     /// Given some options in the RocksDB options string format, parses the options into a hash
@@ -1649,7 +1788,7 @@ mod tests {
         options.set_db_path("/tmp/db_path");
         options.add_column_family("foo");
         options.set_column_family_path("foo", "/tmp/db_path/foo");
-        let (_options, _cfs) = options.into_components()?;
+        let _components = options.into_components()?;
 
         // Testing that these options actually get applied properly by rocks is done in the DB
         // tests, not here
@@ -1657,7 +1796,7 @@ mod tests {
     }
 
     fn test_db_options_stats_level(options: DbOptions, level: StatsLevel) -> Result<()> {
-        let (options, _cfs) = options.into_components()?;
+        let DbComponents { options, .. } = options.into_components()?;
 
         let opts_ptr = options.inner;
         let is_enabled = level != StatsLevel::Disabled;
@@ -1728,7 +1867,10 @@ mod tests {
         // Now build the options structs.
         //
         // The default and `bar` CFs will get the default 32K block size, while `foo` gets 64K.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // `cfs` will contain the CFs that were explicitly added and the dfault.  There is an implied `default` CF
         // also whose parameters are controlled by what's set in `options`
@@ -1837,7 +1979,7 @@ mod tests {
         let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
-        let (mut options, _) = options.into_components().unwrap();
+        let DbComponents { mut options, .. } = options.into_components().unwrap();
 
         options.with_logger(|logger: Option<_>| {
             let logger =
@@ -1857,7 +1999,10 @@ mod tests {
         options.add_column_family("bar");
 
         // Now build the options structs.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // All column families should use the same block cache pointer
         let default_cf = cfs
@@ -1897,7 +2042,10 @@ mod tests {
         options.add_column_family("bar");
 
         // Now build the options structs.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // `cfs` will contain the CFs that were explicitly added and the dfault.  There is an implied `default` CF
         // also whose parameters are controlled by what's set in `options`
@@ -1942,7 +2090,10 @@ mod tests {
         );
 
         // Now build the options structs.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // `default` and `foo` should share the same cache
         let default_cf = cfs
@@ -1984,7 +2135,10 @@ mod tests {
         options.set_default_block_cache(cache.clone());
 
         // Now build the options structs.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // All column families should use the given block cache
         for cf in cfs.into_iter() {
@@ -2020,7 +2174,10 @@ mod tests {
         options.set_column_family_block_cache("bar", bar_cache.clone());
 
         // Now build the options structs.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // Both of the `block_cache` options should have been ignored, and instead the explicit
         // `Cache` objects used

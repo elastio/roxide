@@ -61,6 +61,7 @@ rocksdb::ReadOptions* cast_to_read_options(::rocksdb_readoptions_t* options);
 rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options);
 rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options);
 rocksdb::Cache* cast_to_cache(::rocksdb_cache_t* cache);
+rocksdb::Checkpoint* cast_to_checkpoint(::rocksdb_checkpoint_t* checkpoint);
 
 ::rocksdb_cache_t* wrap_cache(std::shared_ptr<rocksdb::Cache> cache);
 
