@@ -67,6 +67,7 @@ impl Checkpoint {
         db: &DB,
         path: impl Into<path::PathBuf>,
         checkpoint: impl Into<CheckpointHandle>,
+        log_size_for_flush: u64,
     ) -> Result<Self> {
         let path = path.into();
         let checkpoint = checkpoint.into();
@@ -76,7 +77,7 @@ impl Checkpoint {
             ffi_try!(ffi::rocksdb_checkpoint_create(
                 checkpoint.as_ptr(),
                 cpath.as_ptr(),
-                0, // log_size_for_flush; 0 means always flush WAL before checkpointing
+                log_size_for_flush,
             ))?;
         }
 
@@ -169,7 +170,7 @@ mod test {
 
         db.put(&cf, "foo", "bar", None)?;
 
-        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"), None)?;
 
         Ok(())
     }
@@ -185,7 +186,7 @@ mod test {
         // Write some test data to the database before the checkpoint
         db.put(&cf, "foo", "bar", None)?;
 
-        let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+        let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"), None)?;
 
         // Write more data after the checkpoint
         db.put(&cf, "foo", "baz", None)?;
@@ -213,7 +214,7 @@ mod test {
         // Write some test data to the database before the checkpoint
         db.put(&cf, "foo", "bar", None)?;
 
-        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+        let _checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"), None)?;
 
         let labels = DatabaseLabels::from(&db);
         assert_eq!(1, CHECKPOINTS_TOTAL.apply_labels(&labels).unwrap().get());
@@ -246,7 +247,7 @@ mod test {
         let cf = db.get_cf("bar").unwrap();
         crate::test::fill_db(&db, &cf, 10_000)?;
 
-        let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"))?;
+        let checkpoint = db.create_checkpoint(path.path().join("mycheckpoint"), None)?;
 
         // Open the checkpoint as if it were a database
         let _check_db = Db::open_readonly(checkpoint.path(), None, false)?;
@@ -310,7 +311,7 @@ mod test {
         // Since we re-wrote some of the keys and didn't explicitly flush, this will force those
         // writes to be flushed from the memtable to new L0 SSTs, which will be part of the
         // checkpoint.
-        let checkpoint = db.create_checkpoint(checkpoint_path.path())?;
+        let checkpoint = db.create_checkpoint(checkpoint_path.path(), None)?;
 
         println!("SST files after checkpoint:");
         dump_live_files(db.get_live_files()?.as_slice());
