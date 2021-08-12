@@ -236,6 +236,7 @@ impl DbOpen for OptimisticTransactionDb {
 /// enough that it requires some customization.  This helper implements the part that's the same
 /// for all, which is mostly concerned with re-shaping the Rust types into C types, and then
 /// converting the C output back to Rust.
+#[allow(clippy::type_complexity)] // A 4-tuple is a complex type now?  These kids today...
 pub(crate) fn ffi_open_helper<DB, P, O, F>(
     path: P,
     db_options: O,

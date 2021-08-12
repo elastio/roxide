@@ -989,7 +989,7 @@ mod test {
                                     move || {
                                         debug!("In worker thread");
                                         db.with_trans_retryable(move |tx| {
-                                            insert_or_increment(&tx, &cf, &keys)
+                                            insert_or_increment(tx, &cf, &keys)
                                         })
                                     },
                                 )
@@ -1192,7 +1192,7 @@ mod test {
                                     move || {
                                         debug!("In worker thread");
                                         db.with_trans_retryable(move |tx| {
-                                            insert_or_increment(&tx, &cf, &keys)
+                                            insert_or_increment(tx, &cf, &keys)
                                         })
                                     },
                                 )

@@ -844,7 +844,7 @@ mod test {
         let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
+        assert!(!db.get(&cf, "foo", None)?.is_some());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
@@ -857,7 +857,7 @@ mod test {
         let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
+        assert!(!db.get(&cf, "foo", None)?.is_some());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
@@ -870,7 +870,7 @@ mod test {
         let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert_eq!(false, db.get(&cf, "foo", None)?.is_some());
+        assert!(!db.get(&cf, "foo", None)?.is_some());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 

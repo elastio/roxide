@@ -332,12 +332,10 @@ mod test {
             );
         }
 
-        for entry in std::fs::read_dir(dir).unwrap() {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        has_file = true;
-                    }
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    has_file = true;
                 }
             }
         }

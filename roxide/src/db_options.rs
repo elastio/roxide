@@ -863,7 +863,7 @@ impl DbOptions {
         // re-write
         let mut default_block_options = self.get_default_cf_block_table_options();
         let block_cache_option = default_block_options.remove("block_cache");
-        self.set_default_cf_block_table_options(default_block_options.clone());
+        self.set_default_cf_block_table_options(default_block_options);
 
         // Create a block cache for the database, explicitly.
         //
@@ -1254,7 +1254,7 @@ unsafe fn set_options_from_map<
 
     let map_ptr = ffi_util::hashmap_to_stl_unordered_map(map);
 
-    let err = setter_func(&options, &new_options, map_ptr);
+    let err = setter_func(options, &new_options, map_ptr);
 
     ffi_util::free_unordered_map(map_ptr);
 
