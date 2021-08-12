@@ -107,6 +107,24 @@ fn build_rocksdb() {
         include_paths.push("bzip2/".into());
     }
 
+    if cfg!(feature = "jemalloc") {
+        add_define(&mut config, &mut defines, "ROCKSDB_JEMALLOC", None);
+        add_define(&mut config, &mut defines, "JEMALLOC_NO_DEMANGLE", None);
+
+        // We take a dep on the `jemalloc-sys` crate, which internally builds jemalloc from source
+        // into a static library.  It helpfully reports the root path where the static lib and
+        // headers are installed, in a variable called `root`.  Cargo will expose that to us in the
+        // env var `DEP_JEMALLOC_ROOT`.
+        let jemalloc_root = PathBuf::from(
+            std::env::var("DEP_JEMALLOC_ROOT")
+                .expect("missing DEP_JEMALLOC_ROOT env var; is jemalloc-sys a dependency?"),
+        );
+
+        // jemalloc-sys will also tell cargo to link the jemalloc static library, and set the lib
+        // path.  All we need to do is set the include path
+        include_paths.push(jemalloc_root.join("include"));
+    }
+
     add_define(&mut config, &mut defines, "NDEBUG", Some("1"));
 
     let mut lib_sources = include_str!("rocksdb_lib_sources.txt")

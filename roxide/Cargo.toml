@@ -24,6 +24,14 @@ lz4 = ["roxide-librocksdb-sys/lz4", "rocksdb/lz4"]
 # Enable zstd compression in RocksDB
 zstd = ["roxide-librocksdb-sys/zstd", "rocksdb/zstd"]
 
+# Enable jemalloc support in RocksDB
+# NOTE: The Rust code will use whatever the Rust allocator is in the current process
+# Enabling this feature won't automatically make the Rust code use jemalloc.  For that you
+# must set the allocator in the `main.rs` of whatever binary crate hosts RocksDB.
+# This feature takes a dependency on the Rust jemallocator crate but it only causes the RocksDB
+# C++ code to use jemalloc.
+jemalloc = ["roxide-librocksdb-sys/jemalloc", "jemalloc-ctl"]
+
 [dependencies]
 anyhow = { version = "1.0", optional = true }
 async-trait = "0.1.48"
@@ -32,6 +40,7 @@ elasyncio = { version = "3.0", registry = "elastio-private" }
 cpp = "0.5"
 futures = "0.3"
 hex = "0.4"
+jemalloc-ctl = { version = "0.3", optional = true }
 json = "0.12"
 lazy_static = "1.4"
 libc = "0.2"
