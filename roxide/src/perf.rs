@@ -1,6 +1,6 @@
 //! This module provides a Rust interface to the RocksDB performance context.
 //!
-//! https://github.com/facebook/rocksdb/wiki/Perf-Context-and-IO-Stats-Context
+//! <https://github.com/facebook/rocksdb/wiki/Perf-Context-and-IO-Stats-Context>
 //!
 //! This is a thread-local data structure which can be configured to capture various performance
 //! counters specifically related to operations on that thread.  This allows higher level code to

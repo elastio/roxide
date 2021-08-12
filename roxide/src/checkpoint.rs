@@ -172,7 +172,7 @@ impl Checkpoint {
     /// rather than potentially allocating another cache just for this short-lived operation.
     ///
     /// This also does not report any database-level metrics for the checkpoint, which is a big
-    /// cause of https://github.com/elastio/elastio/issues/2457
+    /// cause of <https://github.com/elastio/elastio/issues/2457>
     #[instrument(skip(self), fields(path = %self.path.display()))]
     pub fn get_sst_files(&self) -> Result<Vec<SstFile>> {
         // Using the source database's options as a starting point, tune the config a bit to make
