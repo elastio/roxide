@@ -185,10 +185,10 @@ impl Checkpoint {
         let mut db_options = self.db_options.clone();
         db_options.add_db_options(hashmap! {
             // Don't bother updating stats on files because we don't care
-            "skip_stats_update_on_db_open" => "false",
+            "skip_stats_update_on_db_open" => "true",
 
             // Don't validate SST file sizes, we know they're fine
-            "skip_checking_sst_file_sizes_on_db_open" => "false",
+            "skip_checking_sst_file_sizes_on_db_open" => "true",
 
             // Don't bother opening all files and reading their metadata into memory
             // Open question: what is the lowest practical value that will work, given that we're
@@ -201,13 +201,13 @@ impl Checkpoint {
             hashmap! {
                 // Do not attempt to cache index or filter blocks at all
                 "cache_index_and_filter_blocks" => "false",
-                "cache_index_and_filter_blocks_with_high_priority" => "true",
+                "cache_index_and_filter_blocks_with_high_priority" => "false",
 
                 // Do not pin any index or filter blocks
                 // This probably doesn't do anything if caching index and filter block is disabled
                 // but it doesn't hurt either.
-                "pin_top_level_index_and_filter" => "true",
-                "pin_l0_filter_and_index_blocks_in_cache" => "true",
+                "pin_top_level_index_and_filter" => "false",
+                "pin_l0_filter_and_index_blocks_in_cache" => "false",
             }
             .into_iter()
             .map(|(k, v)| (k.to_string(), v.to_string())),
