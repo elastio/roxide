@@ -4,6 +4,7 @@ use crate::ffi;
 use crate::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
+use std::str::FromStr;
 use std::sync::Arc;
 
 cpp! {{
@@ -216,6 +217,17 @@ impl PartialEq for Cache {
 
 impl Eq for Cache {}
 
+/// Implementing `FromStr` lets use create an instance of `Cache` using `str::parse` which is a
+/// nice convenience, and also is required if we're going to provide a default value for `Cache` in
+/// a struct that uses `SmartDefault`.
+impl FromStr for Cache {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Cache::from_string(s)
+    }
+}
+
 /// Serialize for `Cache` just means serializing the cache config, not the actual contents of the
 /// cache.
 ///
@@ -300,13 +312,13 @@ mod tests {
 
     #[test]
     fn from_valid_string() -> Result<()> {
-        let cache = Cache::from_string("10M")?;
+        let cache: Cache = "10M".parse()?;
         assert_eq!(10 * 1024 * 1024, cache.capacity());
 
-        let cache = Cache::from_string("capacity=10M")?;
+        let cache: Cache = "capacity=10M".parse()?;
         assert_eq!(10 * 1024 * 1024, cache.capacity());
 
-        let cache = Cache::from_string("capacity=10M;num_shard_bits=4")?;
+        let cache: Cache = "capacity=10M;num_shard_bits=4".parse()?;
         assert_eq!(10 * 1024 * 1024, cache.capacity());
 
         Ok(())
