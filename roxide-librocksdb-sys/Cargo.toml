@@ -1,6 +1,6 @@
 [package]
 name = "roxide-librocksdb-sys"
-version = "3.0.2-dev"
+version = "4.0.0"
 edition = "2018"
 authors = ["Karl Hobley <karlhobley10@gmail.com>", "Arkadiy Paronyan <arkadiy@ethcore.io>", "Adam Nelson <adam@elastio.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
