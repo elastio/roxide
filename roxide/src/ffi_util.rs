@@ -235,7 +235,7 @@ impl<T: ?Sized> DynTraitArc<T> {
         self.into_raw() as *mut std::ffi::c_void
     }
 
-    /// Remutitute this wrapper using a raw pointer previously produced by `into_raw`
+    /// Reconstitute this wrapper using a raw pointer previously produced by `into_raw`
     pub(crate) unsafe fn from_raw(raw: *mut Arc<T>) -> Self {
         DynTraitArc(Box::from_raw(raw))
     }
