@@ -58,6 +58,9 @@ pub use self::{
     write::Write,
 };
 
+// Make select functions available to other modules in the crate
+pub(crate) use self::{live_files::get_live_files_impl, open::ffi_open_helper};
+
 // These are not used now but they're in place to support more advanced logging cases than are
 // currently possible with the op-level instrumentation logic.
 #[allow(unused_imports)]

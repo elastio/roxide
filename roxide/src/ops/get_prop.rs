@@ -433,7 +433,7 @@ fn get_property_string_value(
             }
             Some("int") => {
                 // Convert to an int before returning
-                match u64::from_str_radix(&string_value, 10) {
+                match string_value.parse::<u64>() {
                     Ok(int_value) => Some(RocksPropertyValue::IntValue(int_value)),
                     Err(_) => {
                         // Weird.  Fall back to a string value

@@ -16,6 +16,14 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
+// `deref_nullptr` is a new lint in Rust 1.53, so to retain compatibility with earlier Rust
+// versions we allow unknown lints.  This should go away when the minimum supported Rust version is
+// 1.53 or higher.
+#![allow(unknown_lints)]
+// Work around bindgen bug https://github.com/rust-lang/rust-bindgen/issues/1651 and allow the
+// deref of a null pointer.  It doesn't actually do this but it generates the code as part of tests
+// or something.
+#![allow(deref_nullptr)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 

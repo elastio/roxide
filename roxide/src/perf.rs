@@ -1,6 +1,6 @@
 //! This module provides a Rust interface to the RocksDB performance context.
 //!
-//! https://github.com/facebook/rocksdb/wiki/Perf-Context-and-IO-Stats-Context
+//! <https://github.com/facebook/rocksdb/wiki/Perf-Context-and-IO-Stats-Context>
 //!
 //! This is a thread-local data structure which can be configured to capture various performance
 //! counters specifically related to operations on that thread.  This allows higher level code to
@@ -180,7 +180,7 @@ mod test {
         // Consume the context and get the perf stats
         // This should have re-set the rocks perf context to disabled
         let stats = context.collect_stats();
-        assert_eq!(false, is_rocks_perf_enabled());
+        assert!(!is_rocks_perf_enabled());
 
         // We did a couple of GET operations so there should be some non-zero stats
         assert_gt!(stats.stats["get_read_bytes"], 0);
@@ -240,7 +240,7 @@ mod test {
                         // Consume the context and get the perf stats
                         // This should have re-set the rocks perf context to disabled
                         let stats = context.collect_stats();
-                        assert_eq!(false, is_rocks_perf_enabled());
+                        assert!(!is_rocks_perf_enabled());
 
                         // We did a couple of GET operations so there should be some non-zero stats
                         assert_gt!(stats.stats["get_read_bytes"], 0);

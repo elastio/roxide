@@ -14,10 +14,13 @@ impl Db {
         path: P,
     ) -> Result<()> {
         let db_options = db_options.into().unwrap_or_default();
-        let (options, _) = db_options.into_components()?;
+        let components = db_options.into_components()?;
         let cpath = path_to_cstring(path)?;
         unsafe {
-            ffi_try!(ffi::rocksdb_destroy_db(options.inner, cpath.as_ptr(),))?;
+            ffi_try!(ffi::rocksdb_destroy_db(
+                components.options.inner,
+                cpath.as_ptr(),
+            ))?;
         }
         Ok(())
     }
@@ -329,12 +332,10 @@ mod test {
             );
         }
 
-        for entry in std::fs::read_dir(dir).unwrap() {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        has_file = true;
-                    }
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    has_file = true;
                 }
             }
         }

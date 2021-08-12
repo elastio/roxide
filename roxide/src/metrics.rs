@@ -333,7 +333,7 @@ pub fn update_rocks_metrics(
         // `ROCKS_DB_GAUGES` contains the list of those DB-level statistics that we are most
         // interested in
         for ticker in stats.counters {
-            if let Some(ref gauge) = ROCKS_DB_GAUGES.get(&ticker.id) {
+            if let Some(gauge) = ROCKS_DB_GAUGES.get(&ticker.id) {
                 let result = update_rocks_db_gauge(&labels, gauge, &ticker);
 
                 // We only care about failures here if this is a debug build.  In production an error

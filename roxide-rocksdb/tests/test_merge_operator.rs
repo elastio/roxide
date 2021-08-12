@@ -19,6 +19,7 @@
 mod util;
 
 use pretty_assertions::assert_eq;
+use std::ptr;
 
 use roxide_rocksdb::merge_operator::MergeFn;
 use roxide_rocksdb::{DBCompactionStyle, MergeOperands, Options, DB};
@@ -244,10 +245,10 @@ fn counting_merge_test() {
     match db.get(b"k2") {
         Ok(Some(value)) => match from_slice::<ValueCounts>(&*value) {
             Some(v) => unsafe {
-                assert_eq!(v.num_a, 1000);
-                assert_eq!(v.num_b, 500);
-                assert_eq!(v.num_c, 2000);
-                assert_eq!(v.num_d, 500);
+                assert_eq!(ptr::addr_of!(v.num_a).read_unaligned(), 1000);
+                assert_eq!(ptr::addr_of!(v.num_b).read_unaligned(), 500);
+                assert_eq!(ptr::addr_of!(v.num_c).read_unaligned(), 2000);
+                assert_eq!(ptr::addr_of!(v.num_d).read_unaligned(), 500);
             },
             None => panic!("Failed to get ValueCounts from db"),
         },
@@ -257,10 +258,10 @@ fn counting_merge_test() {
     match db.get(b"k1") {
         Ok(Some(value)) => match from_slice::<ValueCounts>(&*value) {
             Some(v) => unsafe {
-                assert_eq!(v.num_a, 3);
-                assert_eq!(v.num_b, 2);
-                assert_eq!(v.num_c, 0);
-                assert_eq!(v.num_d, 1);
+                assert_eq!(ptr::addr_of!(v.num_a).read_unaligned(), 3);
+                assert_eq!(ptr::addr_of!(v.num_b).read_unaligned(), 2);
+                assert_eq!(ptr::addr_of!(v.num_c).read_unaligned(), 0);
+                assert_eq!(ptr::addr_of!(v.num_d).read_unaligned(), 1);
             },
             None => panic!("Failed to get ValueCounts from db"),
         },

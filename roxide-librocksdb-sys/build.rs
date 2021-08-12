@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -54,59 +55,59 @@ fn build_rocksdb() {
     let target = env::var("TARGET").unwrap();
 
     let mut config = cc::Build::new();
+    let mut defines = HashMap::new();
 
-    //Canonicalize the include paths into absolute paths
-    let include_paths: Vec<_> = [
-        "rocksdb/include",
-        "rocksdb",
-        "rocksdb/third-party/gtest-1.8.1/fused-src/",
-    ]
-    .iter()
-    .map(|include| {
-        dunce::canonicalize(include)
-            .unwrap_or_else(|e| panic!("Failed to canonicalize path {}: {}", include, e))
-    })
-    .collect();
+    /// Add a #define to the cc compiler config and to our hashtable at the same time.
+    ///
+    /// We need to be able to re-create the #define's used to build rocks in the C++ code in
+    /// `roxide` so we have to capture them at the source
+    fn add_define<'a>(
+        config: &mut cc::Build,
+        defines: &mut HashMap<String, Option<String>>,
+        name: impl Into<String>,
+        value: impl Into<Option<&'a str>>,
+    ) {
+        let name = name.into();
+        let value = value.into();
 
-    for include in include_paths.iter() {
-        config.include(include.as_path());
+        config.define(&name, value);
+        defines.insert(name, value.map(|s| s.to_string()));
     }
 
-    // Report the include paths via cargo so downstream crates can use them
-    let include_path = std::env::join_paths(include_paths.iter()).expect("join_paths failed");
-    println!(
-        "cargo:include={}",
-        include_path.to_str().expect("to_str failed")
-    );
+    //Canonicalize the include paths into absolute paths
+    let mut include_paths: Vec<PathBuf> = vec![
+        "rocksdb/include".into(),
+        "rocksdb".into(),
+        "rocksdb/third-party/gtest-1.8.1/fused-src/".into(),
+    ];
 
     if cfg!(feature = "snappy") {
-        config.define("SNAPPY", Some("1"));
-        config.include("snappy/");
+        add_define(&mut config, &mut defines, "SNAPPY", "1");
+        include_paths.push("snappy/".into());
     }
 
     if cfg!(feature = "lz4") {
-        config.define("LZ4", Some("1"));
-        config.include("lz4/lib/");
+        add_define(&mut config, &mut defines, "LZ4", Some("1"));
+        include_paths.push("lz4/lib/".into());
     }
 
     if cfg!(feature = "zstd") {
-        config.define("ZSTD", Some("1"));
-        config.include("zstd/lib/");
-        config.include("zstd/lib/dictBuilder/");
+        add_define(&mut config, &mut defines, "ZSTD", Some("1"));
+        include_paths.push("zstd/lib/".into());
+        include_paths.push("zstd/lib/dictBuilder/".into());
     }
 
     if cfg!(feature = "zlib") {
-        config.define("ZLIB", Some("1"));
-        config.include("zlib/");
+        add_define(&mut config, &mut defines, "ZLIB", Some("1"));
+        include_paths.push("zlib/".into());
     }
 
     if cfg!(feature = "bzip2") {
-        config.define("BZIP2", Some("1"));
-        config.include("bzip2/");
+        add_define(&mut config, &mut defines, "BZIP2", Some("1"));
+        include_paths.push("bzip2/".into());
     }
 
-    config.include(".");
-    config.define("NDEBUG", Some("1"));
+    add_define(&mut config, &mut defines, "NDEBUG", Some("1"));
 
     let mut lib_sources = include_str!("rocksdb_lib_sources.txt")
         .trim()
@@ -125,13 +126,13 @@ fn build_rocksdb() {
         // This is needed to enable hardware CRC32C. Technically, SSE 4.2 is
         // only available since Intel Nehalem (about 2010) and AMD Bulldozer
         // (about 2011).
-        config.define("HAVE_SSE42", Some("1"));
+        add_define(&mut config, &mut defines, "HAVE_SSE42", Some("1"));
         config.flag_if_supported("-msse2");
         config.flag_if_supported("-msse4.1");
         config.flag_if_supported("-msse4.2");
 
         if !target.contains("android") {
-            config.define("HAVE_PCLMUL", Some("1"));
+            add_define(&mut config, &mut defines, "HAVE_PCLMUL", Some("1"));
             config.flag_if_supported("-mpclmul");
         }
     }
@@ -141,39 +142,49 @@ fn build_rocksdb() {
     }
 
     // All targets support thread-local storage
-    config.define("ROCKSDB_SUPPORT_THREAD_LOCAL", Some("1"));
+    add_define(
+        &mut config,
+        &mut defines,
+        "ROCKSDB_SUPPORT_THREAD_LOCAL",
+        Some("1"),
+    );
 
     if target.contains("darwin") {
-        config.define("OS_MACOSX", None);
-        config.define("ROCKSDB_PLATFORM_POSIX", None);
-        config.define("ROCKSDB_LIB_IO_POSIX", None);
+        add_define(&mut config, &mut defines, "OS_MACOSX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
     } else if target.contains("android") {
-        config.define("OS_ANDROID", None);
-        config.define("ROCKSDB_PLATFORM_POSIX", None);
-        config.define("ROCKSDB_LIB_IO_POSIX", None);
+        add_define(&mut config, &mut defines, "OS_ANDROID", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
     } else if target.contains("linux") {
-        config.define("OS_LINUX", None);
-        config.define("ROCKSDB_PLATFORM_POSIX", None);
-        config.define("ROCKSDB_LIB_IO_POSIX", None);
+        add_define(&mut config, &mut defines, "OS_LINUX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
     } else if target.contains("freebsd") {
-        config.define("OS_FREEBSD", None);
-        config.define("ROCKSDB_PLATFORM_POSIX", None);
-        config.define("ROCKSDB_LIB_IO_POSIX", None);
+        add_define(&mut config, &mut defines, "OS_FREEBSD", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
     } else if target.contains("windows") {
         link("rpcrt4", false);
         link("shlwapi", false);
-        config.define("DWIN32", None);
-        config.define("OS_WIN", None);
-        config.define("_MBCS", None);
-        config.define("WIN64", None);
-        config.define("NOMINMAX", None);
+        add_define(&mut config, &mut defines, "DWIN32", None);
+        add_define(&mut config, &mut defines, "OS_WIN", None);
+        add_define(&mut config, &mut defines, "_MBCS", None);
+        add_define(&mut config, &mut defines, "WIN64", None);
+        add_define(&mut config, &mut defines, "NOMINMAX", None);
 
         if &target == "x86_64-pc-windows-gnu" {
             // Tell MinGW to create localtime_r wrapper of localtime_s function.
-            config.define("_POSIX_C_SOURCE", Some("1"));
+            add_define(&mut config, &mut defines, "_POSIX_C_SOURCE", Some("1"));
             // Tell MinGW to use at least Windows Vista headers instead of the ones of Windows XP.
             // (This is minimum supported version of rocksdb)
-            config.define("_WIN32_WINNT", Some("_WIN32_WINNT_VISTA"));
+            add_define(
+                &mut config,
+                &mut defines,
+                "_WIN32_WINNT",
+                Some("_WIN32_WINNT_VISTA"),
+            );
         }
 
         // Remove POSIX-specific sources
@@ -209,6 +220,68 @@ fn build_rocksdb() {
         config.flag("-Wno-unused-parameter");
     }
 
+    // Write an include file with the #define's used to build rocks, so that our downstream Rust
+    // code (or rather the C++ code embedded in it with the cpp! macro) can use the same #defines
+    // when it includes Rocks headers
+    let rust_include_path =
+        PathBuf::from(env::var("OUT_DIR").unwrap()).join("roxide-librocksdb-sys");
+    std::fs::create_dir_all(&rust_include_path)
+        .expect("Failed to create rust include file output directory");
+    let cpp_defines_path = rust_include_path.join("cpp_defines.h");
+
+    let mut cpp_defines_content = Vec::new();
+    writeln!(
+        &mut cpp_defines_content,
+        "// Auto-generated by roxide-librocksdb-sys/build.rs"
+    )
+    .unwrap();
+    writeln!(&mut cpp_defines_content, "#pragma once").unwrap();
+    for (name, value) in defines {
+        if let Some(value) = value {
+            writeln!(&mut cpp_defines_content, "#define {} {}", name, value).unwrap();
+        } else {
+            writeln!(&mut cpp_defines_content, "#define {}", name).unwrap();
+        }
+    }
+
+    // Only write this file if it didn't already exist or has changed, so the compiler doesn't try
+    // to re-build all the time
+    if !cpp_defines_path.exists() {
+        fs::write(&cpp_defines_path, &cpp_defines_content).unwrap();
+    } else {
+        let existing = fs::read(&cpp_defines_path).unwrap();
+
+        if existing != cpp_defines_content {
+            fs::write(&cpp_defines_path, &cpp_defines_content).unwrap();
+        }
+    }
+
+    include_paths.push(rust_include_path);
+
+    // Canonicalize all of the include paths so they are fully qualified
+    let include_paths = include_paths
+        .iter()
+        .map(|include| {
+            dunce::canonicalize(include).unwrap_or_else(|e| {
+                panic!("Failed to canonicalize path {}: {}", include.display(), e)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Tell cc about all of these include paths
+    for include in include_paths.iter() {
+        config.include(include.as_path());
+    }
+
+    config.include(".");
+
+    // Report the include paths via cargo so downstream crates can use them also
+    let include_path = std::env::join_paths(include_paths).expect("join_paths failed");
+    println!(
+        "cargo:include={}",
+        include_path.to_str().expect("to_str failed")
+    );
+
     //Build C++ wrapper files in the out dir which will `#include` every source file in the
     //library.  This sucks compared to just calling `config.file` once for each source file, but
     //that doesn't work. Why?  It's complicated.
@@ -231,13 +304,13 @@ fn build_rocksdb() {
     //only the file NAME to the dest dir.  That would be find except the RocksDB code has multiple
     //files with the name `format.cc` in different directories, and this means they clobber
     //eachother on output leading to linker errors that are hard to debug.
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     for file in lib_sources {
         if !file.is_empty() {
             let file = "rocksdb/".to_string() + file;
 
             // Make a file with path `file` relative to `OUT_DIR`, that does nothing but #include
             // the fully-qualified path of the actual source file in the RocksDB library soruces
+            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
             let dummy_file_path = out_path.join(&file);
             if let Some(parent) = dummy_file_path.parent() {
                 std::fs::create_dir_all(parent)
@@ -267,7 +340,6 @@ fn build_rocksdb() {
     }
 
     config.file("build_version.cc");
-
     config.cpp(true);
     config.compile("librocksdb.a");
 }

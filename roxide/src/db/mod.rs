@@ -44,6 +44,7 @@ use crate::handle;
 use crate::handle::RocksObject;
 use crate::ops::WithLogger;
 use crate::rocks_class;
+use crate::Cache;
 use std::sync::Arc;
 
 use std::collections::HashMap;
@@ -73,6 +74,17 @@ pub trait DbLike:
 
     /// Gets the unique ID of this database, which never changes once a database is created.
     fn db_id(&self) -> &str;
+
+    /// The [`crate::Cache`] used by this database as the default block cache for all CFs.
+    ///
+    /// Some CFs might have a different block cache if their config overrides this default.
+    fn block_cache(&self) -> &Cache;
+
+    /// The options with which this database was initialized.
+    ///
+    /// When opening a checkpoint of this database, it's very important that the same options are
+    /// used, in particular the column families and the merge operators, if any.
+    fn db_options(&self) -> &DbOptions;
 
     /// Returns a `ColumnFamilyLike` implementation for the given named column family.  Note that
     /// this implementation will increment the ref count on the database handle, so as long as this
@@ -165,6 +177,10 @@ struct DbLikeCore<HT> {
     // handles will drop first
     cfs: HashMap<String, ColumnFamilyHandle>,
 
+    cache: Cache,
+
+    db_options: DbOptions,
+
     // The database handle drops last
     handle: HT,
 }
@@ -211,6 +227,8 @@ macro_rules! rocks_db_impl {
             pub(crate) fn new(
                 path: impl AsRef<Path>,
                 handle: $handle_type,
+                cache: $crate::Cache,
+                db_options: $crate::DbOptions,
                 cfs: HashMap<String, ColumnFamilyHandle>,
             ) -> Self {
                 // Cache the database ID for future use
@@ -230,6 +248,8 @@ macro_rules! rocks_db_impl {
                         db_id,
                         handle,
                         cfs,
+                        cache,
+                        db_options,
                     }),
                 };
 
@@ -253,6 +273,14 @@ macro_rules! rocks_db_impl {
 
             fn db_id(&self) -> &str {
                 &self.inner.db_id
+            }
+
+            fn block_cache(&self) -> &Cache {
+                &self.inner.cache
+            }
+
+            fn db_options(&self) -> &DbOptions {
+                &self.inner.db_options
             }
 
             fn get_cf<T: AsRef<str>>(&self, name: T) -> Option<Self::ColumnFamilyType> {

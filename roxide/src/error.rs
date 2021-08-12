@@ -91,6 +91,18 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
+    #[snafu(display(
+        "Failed to allocate memory for a RocksDB cache with capacity {}",
+        capacity
+    ))]
+    RocksDbCacheAlloc {
+        capacity: usize,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Failed to parse RocksDB cache string '{}' into cache", value))]
+    RocksDbCacheParse { value: String, backtrace: Backtrace },
+
     /// A database error in the form of a string.  Some RocksDB APIs don't produce anything more
     /// than a string error message.
     #[snafu(display("DB: {}\n{}", message, backtrace))]

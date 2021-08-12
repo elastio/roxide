@@ -23,6 +23,7 @@ use std::ffi::CString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 cpp! {{
     #include "src/ffi_util.h"
@@ -213,17 +214,20 @@ pub(crate) unsafe fn free_rocks_slices_vector(rocks_slices: *mut std::ffi::c_voi
 }
 
 /// Helper for cases where we has a `dyn T` for some trait `T`, and we want to be able to represent
-/// it as a thin pointer (meaning a regular C pointer).  `Box::into_raw` loses the vtable
-/// information when used with a `dyn` trait, so internally this struct just uses a box in a box.
-pub(crate) struct DynTraitBox<T: ?Sized>(Box<Box<T>>);
+/// it as a thin pointer (meaning a regular C pointer).  `Arc::into_raw` loses the vtable
+/// information when used with a `dyn` trait, so internally this struct just uses an Arc in a Box.
+///
+/// Using `Arc<T>` for the inner payload instead of `Box<T>` (which is what was used initially)
+/// means that this is trivially `clone()`able.
+pub(crate) struct DynTraitArc<T: ?Sized>(Box<Arc<T>>);
 
-impl<T: ?Sized> DynTraitBox<T> {
-    pub(crate) fn new(value: Box<T>) -> Self {
-        DynTraitBox(Box::new(value))
+impl<T: ?Sized> DynTraitArc<T> {
+    pub(crate) fn new(value: Arc<T>) -> Self {
+        DynTraitArc(Box::new(value))
     }
 
     /// Consume this wrapper and produce a raw pointer which can be passed to and from C++ code
-    pub(crate) fn into_raw(self) -> *mut Box<T> {
+    pub(crate) fn into_raw(self) -> *mut Arc<T> {
         Box::into_raw(self.0)
     }
 
@@ -232,26 +236,35 @@ impl<T: ?Sized> DynTraitBox<T> {
     }
 
     /// Reconstitute this wrapper using a raw pointer previously produced by `into_raw`
-    pub(crate) unsafe fn from_raw(raw: *mut Box<T>) -> Self {
-        DynTraitBox(Box::from_raw(raw))
+    pub(crate) unsafe fn from_raw(raw: *mut Arc<T>) -> Self {
+        DynTraitArc(Box::from_raw(raw))
     }
 
     pub(crate) unsafe fn from_raw_void(raw: *mut std::ffi::c_void) -> Self {
-        DynTraitBox::from_raw(raw as *mut Box<T>)
+        DynTraitArc::from_raw(raw as *mut Arc<T>)
     }
 }
 
-impl<T: ?Sized> std::ops::Deref for DynTraitBox<T> {
-    type Target = Box<Box<T>>;
+impl<T: ?Sized> std::ops::Deref for DynTraitArc<T> {
+    type Target = Box<Arc<T>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<T: ?Sized> std::ops::DerefMut for DynTraitBox<T> {
+impl<T: ?Sized> std::ops::DerefMut for DynTraitArc<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl<T: ?Sized> Clone for DynTraitArc<T> {
+    fn clone(&self) -> Self {
+        // The `Box` isn't clonable but the `Arc<T>` inside of it is
+        let clone: Arc<T> = *(self.0).clone();
+
+        Self::new(clone)
     }
 }
 
@@ -259,23 +272,23 @@ impl<T: ?Sized> std::ops::DerefMut for DynTraitBox<T> {
 /// to and from C++.  By implementing this trait those structs get the from/into raw pointer
 /// functions for free, and avoid repetition.
 pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
-    /// Creates a new wrapper struct around an already-created `DynTraitBox` instance.  This should
+    /// Creates a new wrapper struct around an already-created `DynTraitArc` instance.  This should
     /// be implemented by the struct as a kind of internal constructor.  Users of `DynTraitWrapper`
     /// implementations should use `wrap` to create instances
-    fn new(value: DynTraitBox<T>) -> Self;
+    fn new(value: DynTraitArc<T>) -> Self;
 
     /// Creates a new wrapper struct around a boxed trait object
-    fn wrap(value: Box<T>) -> Self {
-        Self::new(DynTraitBox::new(value))
+    fn wrap(value: Arc<T>) -> Self {
+        Self::new(DynTraitArc::new(value))
     }
 
-    /// Consumes the wrapper struct and returns the internal `DynTraitBox` object
-    fn unwrap(self) -> DynTraitBox<T>;
+    /// Consumes the wrapper struct and returns the internal `DynTraitArc` object
+    fn unwrap(self) -> DynTraitArc<T>;
 
-    /// Returns a reference to the internal `DynTraitBox` object
-    fn inner(&self) -> &DynTraitBox<T>;
+    /// Returns a reference to the internal `DynTraitArc` object
+    fn inner(&self) -> &DynTraitArc<T>;
 
-    fn inner_mut(&mut self) -> &mut DynTraitBox<T>;
+    fn inner_mut(&mut self) -> &mut DynTraitArc<T>;
 
     /// Consume the struct and return a C pointer for passing the wrapped trait object into C code
     fn into_raw_void(self) -> *mut std::ffi::c_void {
@@ -297,7 +310,7 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
     /// code is no longer holding that pointer.   In a case where you want to temporarily ressurect
     /// the wrapper but not take ownership of it and free it, use `temp_from_raw_void`.
     unsafe fn from_raw_void(raw: *mut std::ffi::c_void) -> Self {
-        Self::new(DynTraitBox::from_raw_void(raw))
+        Self::new(DynTraitArc::from_raw_void(raw))
     }
 
     /// Temporarily convert a raw void pointer to a mutable reference to the wrapper, pass it to a
@@ -324,7 +337,7 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
                 let me_raw = me.into_raw_void();
 
                 // TODO: It's not clear to me from the Rust docs whether or not it's possible for the
-                // memory pointed to in a `Box` to be moved.  This assert is here to ease my mind that this
+                // memory pointed to in a `Arc` to be moved.  This assert is here to ease my mind that this
                 // doesn't happen.  It might be necessary to use `Pin` to force the pointer to remain
                 // unchanged
                 assert!(me_raw == raw);
@@ -342,21 +355,21 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
     }
 
     /// Temporarily access a reference to the wrapped object
-    fn with_inner<R, F: FnOnce(&Box<T>) -> R>(&self, func: F) -> R
+    fn with_inner<R, F: FnOnce(&Arc<T>) -> R>(&self, func: F) -> R
     where
         T: 'static,
     {
         // Falling down the rabbit hole....
-        let inner: &DynTraitBox<T> = self.inner();
+        let inner: &DynTraitArc<T> = self.inner();
 
         // Despite the clippy warning, my intention here is to show with explicit types how we get
         // to the ultimate value passed to the func.  I know what I'm doing, this is just to make
         // the code a bit more clear and less magical
         #[allow(clippy::borrowed_box)]
-        let inner_inner: &Box<Box<T>> = inner;
+        let inner_inner: &Box<Arc<T>> = inner;
 
         #[allow(clippy::borrowed_box)]
-        let innermost: &Box<T> = inner_inner;
+        let innermost: &Arc<T> = inner_inner;
 
         func(innermost)
     }
@@ -384,16 +397,16 @@ macro_rules! make_dyn_trait_wrapper {
         make_dyn_trait_wrapper!(pub(self) $wrapper_type, $trait_type);
     };
     ( $vis:vis $wrapper_type:ident, $trait_type:ident) => {
-        $vis struct $wrapper_type($crate::ffi_util::DynTraitBox<dyn $trait_type + 'static>);
+        $vis struct $wrapper_type($crate::ffi_util::DynTraitArc<dyn $trait_type + 'static>);
 
         impl $wrapper_type {
-            $vis fn new(value: $crate::ffi_util::DynTraitBox<dyn $trait_type + 'static>) -> Self {
+            $vis fn new(value: $crate::ffi_util::DynTraitArc<dyn $trait_type + 'static>) -> Self {
                 Self(value)
             }
         }
 
         impl std::ops::Deref for $wrapper_type {
-            type Target = Box<Box<dyn $trait_type + 'static>>;
+            type Target = ::std::sync::Arc<dyn $trait_type + 'static>;
 
             fn deref(&self) -> &Self::Target {
                 // Call the trait function `inner`, but with thsi awkward syntax required in a macro
@@ -403,19 +416,19 @@ macro_rules! make_dyn_trait_wrapper {
         }
 
         impl $crate::ffi_util::DynTraitWrapper<dyn $trait_type> for $wrapper_type {
-            fn new(value: $crate::ffi_util::DynTraitBox<dyn $trait_type + 'static>) -> Self {
+            fn new(value: $crate::ffi_util::DynTraitArc<dyn $trait_type + 'static>) -> Self {
                 Self::new(value)
             }
 
-            fn unwrap(self) -> $crate::ffi_util::DynTraitBox<dyn $trait_type + 'static> {
+            fn unwrap(self) -> $crate::ffi_util::DynTraitArc<dyn $trait_type + 'static> {
                 self.0
             }
 
-            fn inner(&self) -> &$crate::ffi_util::DynTraitBox<dyn $trait_type + 'static> {
+            fn inner(&self) -> &$crate::ffi_util::DynTraitArc<dyn $trait_type + 'static> {
                 &self.0
             }
 
-            fn inner_mut(&mut self) -> &mut $crate::ffi_util::DynTraitBox<dyn $trait_type + 'static> {
+            fn inner_mut(&mut self) -> &mut $crate::ffi_util::DynTraitArc<dyn $trait_type + 'static> {
                 &mut self.0
             }
         }
@@ -483,25 +496,35 @@ mod test {
     make_dyn_trait_wrapper!(pub(crate) TestTraitCppWrapper, TestTrait);
 
     #[test]
-    fn dyn_trait_box_round_trip() {
-        // Make sure the DynTraitBox can round trip to a C pointer and back and still work
+    fn dyn_trait_arc_round_trip() {
+        // Make sure the DynTraitArc can round trip to a C pointer and back and still work
         let test_struct = TraitImpl::new(42);
-        let test_struct: Box<dyn TestTrait> = Box::new(test_struct);
-        let test_struct = DynTraitBox::<dyn TestTrait>::new(test_struct);
+        let test_struct: Arc<dyn TestTrait> = Arc::new(test_struct);
+        let test_struct = DynTraitArc::<dyn TestTrait>::new(test_struct);
+
+        let test_struct_clone = test_struct.clone();
 
         assert_eq!(43, test_struct.add_something(1));
+
+        test_struct_clone.set_base(50);
+
+        assert_eq!(51, test_struct.add_something(1));
 
         let test_ptr = test_struct.into_raw_void();
 
-        let test_struct = unsafe { DynTraitBox::<dyn TestTrait>::from_raw_void(test_ptr) };
+        let test_struct = unsafe { DynTraitArc::<dyn TestTrait>::from_raw_void(test_ptr) };
 
-        assert_eq!(43, test_struct.add_something(1));
+        assert_eq!(51, test_struct.add_something(1));
+
+        drop(test_struct);
+
+        assert_eq!(51, test_struct_clone.add_something(1));
     }
 
     #[test]
     fn wrapper_round_trip() {
         // Same test as above, but now we're also exercising the macro-generated wrapper struct
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
 
         assert_eq!(43, test_struct.add_something(1));
 
@@ -514,7 +537,7 @@ mod test {
 
     #[test]
     fn temp_from_raw_void_doesnt_free() {
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
 
         let test_ptr = test_struct.into_raw_void();
 
@@ -534,7 +557,7 @@ mod test {
 
     #[test]
     fn free_raw_void_works() {
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
         let test_ptr = test_struct.into_raw_void();
         unsafe {
             TestTraitCppWrapper::free_raw_void(test_ptr);
@@ -544,7 +567,7 @@ mod test {
     #[test]
     fn with_inner_works() {
         // Make sure we can expose the inner wrapped object as a mutable reference
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
 
         assert_eq!(43, test_struct.add_something(1));
 
@@ -561,7 +584,7 @@ mod test {
     fn temp_with_raw_pointer_and_with_inner_works() {
         // Combine two tests; using just a void pointer operate on a mutable reference to the inner
         // object
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
 
         let test_ptr = test_struct.into_raw_void();
 
@@ -587,7 +610,7 @@ mod test {
     fn temp_with_raw_pointer_propagates_panic() {
         // If there's a panic in the `test_with_raw_pointer` callback, it should propagate that
         // panic and _NOT_ free the wrapped object prematurely
-        let test_struct = TestTraitCppWrapper::wrap(Box::new(TraitImpl::new(42)));
+        let test_struct = TestTraitCppWrapper::wrap(Arc::new(TraitImpl::new(42)));
 
         let test_ptr = test_struct.into_raw_void();
         let result = std::panic::catch_unwind(|| unsafe {

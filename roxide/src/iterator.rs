@@ -334,7 +334,7 @@ impl Drop for DbRangeIterator {
 /// An iterator over a range of keys in a RocksDB column family within a transaction
 ///
 /// Since Rocks doesn't support range iteration on a transaction natively
-/// (https://github.com/facebook/rocksdb/issues/2343), it must be implemented manually.  That's not
+/// (<https://github.com/facebook/rocksdb/issues/2343>), it must be implemented manually.  That's not
 /// nearly as performant as doing it at the rocks level; hopefully someday they get around to
 /// implementing this properly.
 pub struct TransactionRangeIterator {

@@ -14,12 +14,14 @@ use crate::handle;
 use crate::logging;
 use crate::merge;
 use crate::ops::StatsLevel;
+use crate::Cache;
 use cheburashka::logging::prelude::*;
 use maplit::hashmap;
 use num_traits::PrimInt;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
+use std::hash::Hash;
 use std::ptr;
 use std::{
     borrow::Borrow,
@@ -48,6 +50,8 @@ pub mod prelude {
         ReadOptions, WriteOptions,
     };
 }
+
+const DEFAULT_BLOCK_CACHE: &str = "capacity=1G";
 
 // In the C++ source file which the cpp macro will generate make sure the relevant includes are
 // present
@@ -101,18 +105,30 @@ pub const DEFAULT_CF_NAME: &str = "default";
 /// A description of the column family, containing the name and `Options`.
 pub struct ColumnFamilyDescriptor {
     pub(crate) name: String,
+    /// The column-family level RocksDB `Options` struct which overrides the database-level
+    /// `Options`
     pub(crate) options: Options,
+
+    /// The block cache used by this CF.
+    ///
+    /// This may be a unique cache specific to the CF, or it may be a clone of the DB-level cache
+    /// in [`DbComponents::block_cache`], depending upon the [`DbOptions`] config which produces
+    /// this descriptor.
+    #[allow(dead_code)]
+    // This is going to be used in the future to report per-CF block cache stats
+    pub(crate) block_cache: Cache,
 }
 
 impl ColumnFamilyDescriptor {
     /// Create a new column family descriptor with the specified name and options.
-    pub fn new<S>(name: S, options: Options) -> Self
+    pub fn new<S>(name: S, options: Options, block_cache: Cache) -> Self
     where
         S: Into<String>,
     {
         ColumnFamilyDescriptor {
             name: name.into(),
             options,
+            block_cache,
         }
     }
 
@@ -122,13 +138,63 @@ impl ColumnFamilyDescriptor {
     }
 }
 
+/// The components necessary to create or open a RocksDB database
+///
+/// This is created from a [`DbOptions`] struct using [`DbOptions::into_components`], and contains
+/// all of the lower-level structures and configuration needed to use `roxide-rocksdb` to open a
+/// RocksDB database with configuration options as they were specified in the source `DbOptions`
+/// instance
+pub(crate) struct DbComponents {
+    /// The database options struct (called `Options` because confusingly that's what the RocksDB
+    /// C++ API uses)
+    pub options: rocksdb::Options,
+
+    /// The default block cache used by the entire database.
+    pub block_cache: Cache,
+
+    /// The column families in the DB, each with their own config
+    pub column_families: Vec<ColumnFamilyDescriptor>,
+}
+
 /// Struct that contains all of the information about a database other than it's path.  Not to be
 /// confused with the `rocksdb::DBOptions` struct which is something entirely different and more
 /// confusing
 ///
 /// This struct is used to build `rocksdb::Options` (which wraps the C++ `Options` struct) and
 /// `rocksdb::ColumnFamilyDescriptor` (which wraps the `Options` and name for each column family).
-#[derive(Serialize, Deserialize)]
+///
+/// # Block Caches
+///
+/// There's some additional complexity related to configuring the block cache (or caches) on a
+/// database.  This is necessary as part of #3026, to support the use of a single block cache
+/// across multiple databases, and it's also what makes it possible to have separate block caches
+/// for certain CFs while all the others use the default.
+///
+/// ## Database-level block cache
+///
+/// At the database level, setting a default cache with [`Self::set_default_block_cache`] will
+/// override the cache specified in block cache options for the default column family, so that even
+/// if `default_cf_options` contains a `block_based_table_factory` setting with a `block_cache`
+/// value, that will be ignored and the [`crate::Cache`] instance passed to
+/// [`Self::set_default_block_cache`] will be used as the block cache for the `default` CF and any
+/// other CFs for which a separate block cache isn't provided.
+///
+/// If no default cache is provided with `set_default_block_cache`, then a 1GB block cache will be
+/// created and used as the default for this database, and that cache will never be shared with any
+/// other databases in the same process.
+///
+/// ## Column family-level block caches
+///
+/// The cache for a specific column family can be set with [`Self::set_column_family_block_cache`].
+/// This makes it possible to share non-default caches between specific column families, possibly
+/// even in different databases.  As with the default cache, setting a block cache with
+/// `set_column_family_block_cache` will supercede the block cache specified in the
+/// `block_based_table_factory` for that column family.  If no block cache was set with
+/// `set_column_family_block_cache`, and a `block_cache` value is present in the column family's
+/// `block_based_table_factory` value, then RocksDB will allocate a dedicated block cache for that
+/// column family, which will be unique to that CF and cannot be shared with other databases in the
+/// process.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DbOptions {
     /// Database-wide options
     db_options: HashMap<String, String>,
@@ -143,6 +209,11 @@ pub struct DbOptions {
     /// Column family options which will apply to all column families
     default_cf_options: HashMap<String, String>,
 
+    /// The block cache to use for all column families in this database, unless overridden for a
+    /// specific CF.  If no cache is provided, the default is to allocate a single block cache for
+    /// all CFs in the database, which is not shared with any other databases.
+    default_block_cache: Option<Cache>,
+
     /// Additional (non-default) column families.  The key is the name of the CF, and the value is
     /// a `HashMap` of settings for that CF.  Each CF inherits settings from `default_cf_options`
     /// unless they are explicitly overridden.
@@ -152,6 +223,12 @@ pub struct DbOptions {
     /// name of the CF.  If a given column family doesn't have a path in this field, then `db_path`
     /// is used; if `db_path` is `None`, then whatever path was passed to `open*` is used.
     column_family_paths: HashMap<String, PathBuf>,
+
+    /// Custom block caches per column family.  The key is the same as `column_families`: the
+    /// name of the CF.  If a given column family doesn't have a cache in this field, then
+    /// `default_block_cache` is used; if `default_block_cache` is `None`, then a default block
+    /// cache will be allocated automatically and used shared between the column families.
+    column_family_block_caches: HashMap<String, Cache>,
 
     stats_level: StatsLevel,
 
@@ -166,18 +243,18 @@ pub struct DbOptions {
         String,
         (
             String,
-            Box<dyn merge::MergeFn>,
-            Option<Box<dyn merge::MergeFn>>,
+            Arc<dyn merge::MergeFn>,
+            Option<Arc<dyn merge::MergeFn>>,
         ),
     >,
 
     /// An optional event listener which will receive various RocksDB notifications
     #[serde(skip)]
-    event_listener: Option<Box<dyn events::RocksDbEventListener>>,
+    event_listener: Option<Arc<dyn events::RocksDbEventListener>>,
 
     /// An optional logger which will be passed all RocksDB log messages at or above `log_level`
     #[serde(skip)]
-    logger: Option<Box<dyn logging::RocksDbLogger>>,
+    logger: Option<Arc<dyn logging::RocksDbLogger>>,
 
     /// The RocksDB internal log level, controlling what level of log messages get passed to
     /// `logger`.  If `logger` is `None`, this option has no effect
@@ -205,6 +282,8 @@ impl DbOptions {
 
             default_cf_options: Self::make_owned_hash_map(default_cf_options),
 
+            default_block_cache: None,
+
             column_families: column_families
                 .borrow()
                 .iter()
@@ -212,6 +291,8 @@ impl DbOptions {
                 .collect(),
 
             column_family_paths: HashMap::new(),
+
+            column_family_block_caches: HashMap::new(),
 
             stats_level: StatsLevel::Disabled,
 
@@ -329,6 +410,53 @@ impl DbOptions {
         Ok(())
     }
 
+    /// Set the [`crate::Cache`] instance that will be the default block cache for all CFs in this
+    /// database which do not have a specific block cache of their own.
+    ///
+    /// If this is set, it overrides the default column family's `block_based_table_factory`
+    /// parameter `block_cache`.
+    ///
+    /// Because `Cache` is very cheaply clonable, it's possible that this cache is also used as the
+    /// block cache for other databases in the same process.  That's a supported use case, and all
+    /// databases will contend for cache space as equals.
+    pub fn set_default_block_cache(&mut self, cache: Cache) {
+        self.default_block_cache = Some(cache);
+    }
+
+    /// Forcibly set `cache` as the block cache for this database, removing any column
+    /// family-specific block cache instances or options.
+    ///
+    /// After this is called, it's guaranteed that all column families will use the specified cache
+    /// and no other block cache will be in use.
+    pub fn force_block_cache(&mut self, cache: Cache) {
+        // First set this as the default
+        self.set_default_block_cache(cache);
+
+        // Now clear all CF-specific caches
+        self.column_family_block_caches.clear();
+
+        // And clear any `block_cache` options from the default and per-CF options maps
+        let mut default_block_options = self.get_default_cf_block_table_options();
+        default_block_options.remove("block_cache");
+        self.set_default_cf_block_table_options(default_block_options);
+
+        // Note the need to make owned copies of all of the CF names so that we can mutate `self`
+        // inside the loop
+        for name in self
+            .column_families
+            .keys()
+            .map(|k| k.to_owned())
+            .collect::<Vec<_>>()
+        {
+            let mut block_options = self
+                .get_column_family_block_table_options(&name)
+                .expect("BUG: This CF is known to be presenet");
+            block_options.remove("block_cache");
+            self.set_column_family_block_table_options(name, block_options)
+                .expect("BUG: This CF is known to be presenet");
+        }
+    }
+
     pub fn set_stats_level(&mut self, level: StatsLevel) {
         self.stats_level = level;
     }
@@ -368,6 +496,19 @@ impl DbOptions {
     {
         self.column_family_paths
             .insert(name.to_string(), path.into());
+    }
+
+    /// Set the [`crate::Cache`] instance that will be the default block cache for a given column
+    /// family.
+    ///
+    /// If this is set, it overrides the  column family's `block_based_table_factory` parameter
+    /// `block_cache`.
+    pub fn set_column_family_block_cache<N>(&mut self, name: N, cache: Cache)
+    where
+        N: ToString,
+    {
+        self.column_family_block_caches
+            .insert(name.to_string(), cache);
     }
 
     /// Gets the current block-based table factory options for a previously-added column family.
@@ -415,10 +556,14 @@ impl DbOptions {
     {
         let cf_name = cf_name.to_string();
         if let Some(cf_opts) = self.column_families.get_mut(&cf_name) {
-            cf_opts.insert(
-                "block_based_table_factory".to_string(),
-                Self::build_options_string(options),
-            );
+            if !options.borrow().is_empty() {
+                cf_opts.insert(
+                    "block_based_table_factory".to_string(),
+                    Self::build_options_string(options),
+                );
+            } else {
+                cf_opts.remove("block_based_table_factory");
+            }
 
             Ok(())
         } else {
@@ -468,8 +613,8 @@ impl DbOptions {
         &mut self,
         cf_name: impl ToString,
         operator_name: impl ToString,
-        full_merge_fn: Box<dyn merge::MergeFn>,
-        partial_merge_fn: Option<Box<dyn merge::MergeFn>>,
+        full_merge_fn: Arc<dyn merge::MergeFn>,
+        partial_merge_fn: Option<Arc<dyn merge::MergeFn>>,
     ) -> Result<()> {
         let cf_name = cf_name.to_string();
         if self.column_families.get(&cf_name).is_none() {
@@ -489,7 +634,7 @@ impl DbOptions {
 
     /// Sets an optional event listener which will receive events about RocksDB internal operations
     pub fn set_event_listener(&mut self, listener: impl events::RocksDbEventListener + 'static) {
-        self.event_listener = Some(Box::new(listener));
+        self.event_listener = Some(Arc::new(listener));
     }
 
     /// Sets the logger which will receive all of the RocksDB log messages corresponding to `level`
@@ -498,7 +643,7 @@ impl DbOptions {
         level: log::LevelFilter,
         logger: impl logging::RocksDbLogger + 'static,
     ) {
-        self.logger = Some(Box::new(logger));
+        self.logger = Some(Arc::new(logger));
         self.log_level = level;
     }
 
@@ -510,25 +655,41 @@ impl DbOptions {
         logger: impl logging::RocksDbLogger + 'static,
     ) {
         if self.logger.is_none() {
-            self.logger = Some(Box::new(logger));
+            self.logger = Some(Arc::new(logger));
             self.log_level = level;
         }
     }
 
     /// Once the options are set correctly, this method is called to consume the struct and convert
-    /// it into a `Options` struct with the database options, and a vector of
+    /// it into the raw components needed to create or open a RocksDB database with the underlying
+    /// `roxide-rocksdb` crate.
+    ///
+    /// a `Options` struct with the database options, and a vector of
     /// `ColumnFamilyDescriptor` struct with the name and options of each column family.  This is
     /// the representation which RocksDB needs to operate on.
-    pub fn into_components(mut self) -> Result<(Options, Vec<ColumnFamilyDescriptor>)> {
+    pub(crate) fn into_components(mut self) -> Result<DbComponents> {
+        // Immediately, make sure that there is a specific `Cache` instance for the DB and every
+        // CF, removing any explicit `block_cache` options parameter in the process.
+        //
+        // After this, `self.default_block_cache` is guaranteed non-None, and there is guaranteed
+        // to be a specific `Cache` in `self.column_family_block_caches` for every CF except for
+        // default.
+        self.instantiate_block_caches()?;
+
+        let default_block_options = self.get_default_cf_block_table_options();
+        let default_block_cache = self
+            .default_block_cache
+            .expect("BUG: instantiate_block_caches should have created a block cache already");
+
         let opts = Options::default();
 
         // Apply the DB and defualt CF options directly to this `Options` struct
-        let default_block_options = self.get_default_cf_block_table_options();
         let mut opts = opts.set_db_options_from_map(&self.db_options)?;
         if let Some(db_path) = self.db_path.as_ref() {
             opts.set_db_path(db_path)?;
         }
-        let mut opts = opts.set_cf_options_from_map(&self.default_cf_options)?;
+        let mut opts =
+            opts.set_cf_options_from_map(&self.default_cf_options, default_block_cache.clone())?;
         if let Some(logger) = self.logger {
             if let Some(level) = self.log_level.to_level() {
                 opts.set_logger(level, logger);
@@ -565,9 +726,6 @@ impl DbOptions {
             }
         }
 
-        let mut merge_operators = self.merge_operators;
-        let column_family_paths = self.column_family_paths;
-
         // Callers should not generally create an explicit CF called `default`.  The `default` CF
         // always exists in all RocksDB databases, whether we add it or not.  However, for
         // consistency and to avoid special-casing code elsewhere related to this column group,
@@ -582,36 +740,48 @@ impl DbOptions {
 
         self.column_families
             .insert(DEFAULT_CF_NAME.to_string(), HashMap::new());
+        self.column_family_block_caches
+            .insert(DEFAULT_CF_NAME.to_string(), default_block_cache.clone());
+
+        let mut merge_operators = self.merge_operators;
+        let column_family_paths = self.column_family_paths;
+        let mut column_family_block_caches = self.column_family_block_caches;
 
         // Create `ColumnFamilyDescriptor`s for every additional column family
         // If there were any errors, return the first one
         let cfs: Result<Vec<(String, Options)>, Error> =
             self.column_families
                 .into_iter()
-                .map(|(name, options)| {
-                    let mut options = options;
-
+                .map(|(name, mut options)| {
                     // Take special care with `block_based_table_factory`, which unlike the other
                     // options we'll actually parse out of both the default and the CF-specific options
                     // hashes and use the combination of both.
-                    if let Some(cf_block_options) = options.get("block_based_table_factory") {
-                        let mut cf_block_options = Self::parse_options_string(cf_block_options);
-                        for (key, value) in default_block_options.iter() {
-                            if !cf_block_options.contains_key(key) {
-                                cf_block_options.insert(key.to_string(), value.to_string());
-                            }
+                    let mut cf_block_options = default_block_options.clone();
+                    if let Some(cf_options_string) = options.remove("block_based_table_factory") {
+                        // There are some CF-specific block-based table factory settings, so
+                        // overlay those on top of the default CF block based table options
+                        for (key, value) in Self::parse_options_string(cf_options_string) {
+                            cf_block_options.insert(key.to_string(), value.to_string());
                         }
+                    };
 
-                        if !cf_block_options.is_empty() {
-                            options.insert(
-                                "block_based_table_factory".to_string(),
-                                Self::build_options_string(&cf_block_options),
-                            );
-                        }
+                    // There is guaranteed to be a Cache object for every CF after
+                    // `instantiate_block_caches` was called
+                    let block_cache = column_family_block_caches
+                        .get(&name)
+                        .cloned()
+                        .expect("BUG: instantiate_block_caches should have set this");
+
+                    // Put back whatever options are left after removing `block_cache`
+                    if !cf_block_options.is_empty() {
+                        options.insert(
+                            "block_based_table_factory".to_string(),
+                            Self::build_options_string(&cf_block_options),
+                        );
                     }
 
                     // Start from the default CF options, but layer on this family-specific options
-                    let mut cf_opts = opts.set_cf_options_from_map(&options)?;
+                    let mut cf_opts = opts.set_cf_options_from_map(&options, block_cache)?;
 
                     // If there's a merge operator for this CF, apply that now
                     // Note we `remove` instead of `get` because the
@@ -663,10 +833,117 @@ impl DbOptions {
 
         let cf_descriptors: Vec<_> = cfs
             .into_iter()
-            .map(|(name, options)| ColumnFamilyDescriptor::new(name, options))
+            .map(|(name, options)| {
+                let block_cache = column_family_block_caches
+                    .remove(&name)
+                    .expect("BUG: instantiate_block_caches should have set this");
+                ColumnFamilyDescriptor::new(name, options, block_cache)
+            })
             .collect();
 
-        Ok((opts, cf_descriptors))
+        Ok(DbComponents {
+            options: opts,
+            block_cache: default_block_cache,
+            column_families: cf_descriptors,
+        })
+    }
+
+    /// Process the default CF settings and every per-CF setting, setting a specific `Cache`
+    /// instance at the database level as well as every CF.
+    ///
+    /// After this completes, any `block_cache` option from the option maps will be removed, and
+    /// there will be a concrete `Cache` instance set in `default_block_cache`, and each column
+    /// family will also have a specific `Cache` instance assigned.  The default behavior if no
+    /// cache settings were present in the options will be for all of those `Cache` instances to be
+    /// clones of one single database-wide cache, however any existing `Cache` objects set at the
+    /// DB or CF level, and any `block_cache` directives in the options, will be honored if
+    /// present.
+    fn instantiate_block_caches(&mut self) -> Result<()> {
+        // Read the default CF block table options, removing `block_cache` if present, and then
+        // re-write
+        let mut default_block_options = self.get_default_cf_block_table_options();
+        let block_cache_option = default_block_options.remove("block_cache");
+        self.set_default_cf_block_table_options(default_block_options);
+
+        // Create a block cache for the database, explicitly.
+        //
+        // Note that RocksDB will make one automatically, but if Rocks does that we won't be able
+        // to get a hold of it, which means we can't ensure that other CFs re-use the same default
+        // block cache.  By always creating it explicitly, we always have a `Cache` object we can
+        // pass to the C++ BlockBasedOptions` for non-default CFs
+        let default_block_cache = if let Some(cache) = self.default_block_cache.as_ref() {
+            // A concrete `Cache` instance takes priority over a block_cache setting in the block
+            // table options
+            if let Some(overridden_cache) = block_cache_option {
+                warn!(actual_default_block_cache = ?cache,
+                    overridden_block_cache = %overridden_cache,
+                    "The `block_cache` parameter in the default ColumnFamily options is being overriden by a `Cache` object passed at runtime");
+            }
+
+            cache.clone()
+        } else {
+            // Else caller didn't set a default block cache, so create a block cache object now
+            let new_cache = if let Some(block_cache) = block_cache_option {
+                // The default CF options have a `block_cache` value set, so use this to make the
+                // default cache
+                debug!(%block_cache, "Creating the default database block cache from a `block_cache` option");
+                Cache::from_string(block_cache)?
+            } else {
+                // No block cache is set at all, so use the hard-coded default
+                debug!(
+                    block_cache = DEFAULT_BLOCK_CACHE,
+                    "Creating the default database block cache using hard-coded default"
+                );
+                Cache::from_string(DEFAULT_BLOCK_CACHE)?
+            };
+
+            self.default_block_cache = Some(new_cache.clone());
+
+            new_cache
+        };
+
+        // Now apply much the same logic but for every CF
+        // Note the need to make owned copies of all of the CF names so that we can mutate `self`
+        // inside the loop
+        for name in self
+            .column_families
+            .keys()
+            .map(|k| k.to_owned())
+            .collect::<Vec<_>>()
+        {
+            let mut block_table_options = self.get_column_family_block_table_options(&name)?;
+            let block_cache_option = block_table_options.remove("block_cache");
+            self.set_column_family_block_table_options(&name, block_table_options)?;
+
+            if let Some(block_cache) = self.column_family_block_caches.get(&name) {
+                if let Some(overridden_cache) = block_cache_option {
+                    // The block based table options included a `block_cache` option but
+                    // that's being overridden by a specific block cache specified at
+                    // runtime.  That's fine but make sure the user knows
+                    warn!(actual_block_cache = ?block_cache,
+                                overridden_block_cache = %overridden_cache,
+                                column_family = %name,
+                                "The column family `block_cache` parameter is being overriden by a `Cache` object passed at runtime");
+                }
+            } else {
+                let cf_block_cache = if let Some(block_cache) = block_cache_option {
+                    // No concrete `Cache` instance was provided for this CF, but it's
+                    // `block_based_table_factory` options include an explicit `block_cache`
+                    // directive so it should get its own block cache
+                    debug!(%block_cache,
+                            column_family = %name,
+                            "Creating column family block cache based on `block_cache` parameter");
+                    Cache::from_string(block_cache)?
+                } else {
+                    // No explicit Cache and no `block_cache` directive in the CF options, so
+                    // just use the default cache
+                    default_block_cache.clone()
+                };
+                self.column_family_block_caches.insert(name, cf_block_cache);
+            };
+        }
+
+        Ok(())
     }
 
     /// Given some options in the RocksDB options string format, parses the options into a hash
@@ -722,34 +999,40 @@ impl DbOptions {
 
 impl fmt::Debug for DbOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(
-            f,
-            "DBOptions(
-            db_options: {:?},
-            default_cf_options: {:?},
-            column_families: {:?},
-            stats_level: {:?},
-            merge_operators: {:?},
-            )",
-            self.db_options,
-            self.default_cf_options,
-            self.column_families,
-            self.stats_level,
-            self.merge_operators
-                .iter()
-                .map(|(key, (operator_name, full_merge_fn, partial_merge_fn))| {
-                    // render this name-value pair into something that can be formatted for debug output
-                    (
-                        key,
+        f.debug_struct("DbOptions")
+            .field("db_options", &self.db_options)
+            .field("db_path", &self.db_path)
+            .field("default_cf_options", &self.default_cf_options)
+            .field("default_block_cache", &self.default_block_cache)
+            .field("column_families", &self.column_families)
+            .field("column_family_paths", &self.column_family_paths)
+            .field(
+                "column_family_block_caches",
+                &self.column_family_block_caches,
+            )
+            .field("stats_level", &self.stats_level)
+            .field(
+                "merge_operators",
+                &self
+                    .merge_operators
+                    .iter()
+                    .map(|(key, (operator_name, full_merge_fn, partial_merge_fn))| {
+                        // render this name-value pair into something that can be formatted for debug output
                         (
-                            operator_name,
-                            format!("{:p}", full_merge_fn),
-                            format!("{:p}", partial_merge_fn),
-                        ),
-                    )
-                })
-                .collect::<Vec<_>>()
-        )
+                            key,
+                            (
+                                operator_name,
+                                format!("{:p}", full_merge_fn),
+                                format!("{:p}", partial_merge_fn),
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .field("event_listener", &self.event_listener.is_some())
+            .field("logger", &self.logger.is_some())
+            .field("log_level", &self.log_level)
+            .finish()
     }
 }
 
@@ -757,7 +1040,9 @@ impl PartialEq for DbOptions {
     fn eq(&self, other: &Self) -> bool {
         self.db_options == other.db_options
             && self.default_cf_options == other.default_cf_options
+            && self.default_block_cache == other.default_block_cache
             && self.column_families == other.column_families
+            && self.column_family_block_caches == other.column_family_block_caches
             && self.stats_level == other.stats_level
             && self.merge_operators.keys().collect::<Vec<_>>()
                 == other.merge_operators.keys().collect::<Vec<_>>()
@@ -969,7 +1254,7 @@ unsafe fn set_options_from_map<
 
     let map_ptr = ffi_util::hashmap_to_stl_unordered_map(map);
 
-    let err = setter_func(&options, &new_options, map_ptr);
+    let err = setter_func(options, &new_options, map_ptr);
 
     ffi_util::free_unordered_map(map_ptr);
 
@@ -1060,21 +1345,33 @@ pub trait OptionsExt {
     /// This has the advantage of always accepting the latest options, no need to wait for them to
     /// be added to the RocksDB C bindings or to the `rust-rocksdb` wrapper.
     ///
+    /// This function does not expect to see `block_cache` in `block_based_table_factory` options,
+    /// because the caller should have already stripped that option out (if present) and replaced
+    /// it with a concrete `Cache` instance in the `block_cache` argument.
+    ///
+    /// This doesn't support any CF types other than those created with `BlockBasedTableFactory`
+    /// because of this requirement.
+    ///
     /// # Example
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use roxide::{Options, OptionsExt};
+    /// use roxide::{Cache, Options, OptionsExt};
     ///
+    /// let cache = Cache::with_capacity(1_000_000).unwrap();
     /// let mut options = HashMap::new();
     /// options.insert("report_bg_io_stats", "true");
     /// options.insert("max_compaction_bytes", "1M");
     /// let opt = Options::default();
-    /// let _opt = opt.set_cf_options_from_map(&options).unwrap();
+    /// let _opt = opt.set_cf_options_from_map(&options, cache).unwrap();
     /// ```
-    fn set_cf_options_from_map<K: AsRef<str> + Into<Vec<u8>>, V: AsRef<str> + Into<Vec<u8>>>(
+    fn set_cf_options_from_map<
+        K: AsRef<str> + Into<Vec<u8>> + Eq + Hash,
+        V: AsRef<str> + Into<Vec<u8>>,
+    >(
         &self,
         map: &HashMap<K, V>,
+        block_cache: Cache,
     ) -> Result<Options>;
 
     /// Set the `db_paths` to a single path `path` without any size limit.
@@ -1094,7 +1391,7 @@ pub trait OptionsExt {
     /// The specified `level` is the minimum level that will be logged.  Log events below this
     /// level will be skipped at the source level and thus incur almost no overhead.  Log events at
     /// this level or above will be passed to the logging trait.
-    fn set_logger(&mut self, min_level: log::Level, logger: Box<dyn logging::RocksDbLogger>);
+    fn set_logger(&mut self, min_level: log::Level, logger: Arc<dyn logging::RocksDbLogger>);
 
     fn inner_logger(&self) -> *mut ffi::rocksdb_options_t;
 
@@ -1102,10 +1399,7 @@ pub trait OptionsExt {
     /// that impl to a closure for additional customization.
     ///
     /// If there is no logger configured, `None` is passed to the closure.
-    fn with_logger<R, F: FnOnce(Option<&Box<dyn logging::RocksDbLogger>>) -> R>(
-        &mut self,
-        func: F,
-    ) -> R
+    fn with_logger<R, F: FnOnce(Option<&dyn logging::RocksDbLogger>) -> R>(&mut self, func: F) -> R
     where
         F: std::panic::UnwindSafe,
     {
@@ -1137,7 +1431,7 @@ pub trait OptionsExt {
     }
 
     /// Sets an event listener to be notified of RocksDB internal events
-    fn set_event_listener(&mut self, listener: Box<dyn events::RocksDbEventListener>);
+    fn set_event_listener(&mut self, listener: Arc<dyn events::RocksDbEventListener>);
 
     /// Sets default crc32 checksum generator factory
     fn set_default_checksum_gen_factory(&mut self);
@@ -1181,12 +1475,57 @@ impl OptionsExt for Options {
         }
     }
 
-    fn set_cf_options_from_map<K: AsRef<str> + Into<Vec<u8>>, V: AsRef<str> + Into<Vec<u8>>>(
+    fn set_cf_options_from_map<
+        K: AsRef<str> + Into<Vec<u8>> + Eq + Hash,
+        V: AsRef<str> + Into<Vec<u8>>,
+    >(
         &self,
         map: &HashMap<K, V>,
+        block_cache: Cache,
     ) -> Result<Options> {
+        let mut map = map
+            .iter()
+            .map(|(k, v)| (k.as_ref().to_owned(), v.as_ref().to_owned()))
+            .collect::<HashMap<_, _>>();
+
+        // Remove the `block_based_table_factory` option, if present, because we'll handle that
+        // separately
+        let block_based_options_map = map
+            .remove("block_based_table_factory")
+            .map(|value| {
+                // Parse this single string into a hashmap of options being passed to the block
+                // based table factory
+                DbOptions::parse_options_string(value)
+            })
+            .unwrap_or_default();
+
+        // Code in `into_components` should have stripped `block_cache` out before it gets this
+        // far, so just make sure
+        debug_assert!(!block_based_options_map.contains_key("block_cache"));
+
+        // Set the block_based_table_factory options (other than `block_cache`) using a map of
+        // strings, and the block cache set explicitly with a pointer to the cache
+        let block_based_options =
+            BlockBasedOptions::default().set_options_from_map(&block_based_options_map)?;
+
         unsafe {
-            set_options_from_map::<Options, _, _, _>(self, map, |options, new_options, map_ptr| {
+            ffi::rocksdb_block_based_options_set_block_cache(
+                block_based_options.inner,
+                block_cache.rocksdb_cache_t(),
+            );
+        }
+
+        // Set all of these block-based options on the options struct
+        unsafe {
+            ffi::rocksdb_options_set_block_based_table_factory(
+                self.inner,
+                block_based_options.inner,
+            );
+        }
+
+        // Now all other CF options, other than the block-based ones, can be applied
+        unsafe {
+            set_options_from_map::<Options, _, _, _>(self, &map, |options, new_options, map_ptr| {
                 let options_ptr = options.inner;
                 let new_options_ptr = new_options.inner;
 
@@ -1242,7 +1581,7 @@ impl OptionsExt for Options {
         Ok(())
     }
 
-    fn set_logger(&mut self, min_level: log::Level, logger: Box<dyn logging::RocksDbLogger>) {
+    fn set_logger(&mut self, min_level: log::Level, logger: Arc<dyn logging::RocksDbLogger>) {
         let logger = logging::CppLoggerWrapper::wrap(logger);
 
         let options_ptr = self.inner;
@@ -1266,7 +1605,7 @@ impl OptionsExt for Options {
     }
 
     /// Sets an event listener to be notified of RocksDB internal events
-    fn set_event_listener(&mut self, listener: Box<dyn events::RocksDbEventListener>) {
+    fn set_event_listener(&mut self, listener: Arc<dyn events::RocksDbEventListener>) {
         let listener = events::CppListenerWrapper::wrap(listener);
 
         let options_ptr = self.inner;
@@ -1306,7 +1645,12 @@ mod tests {
         cf_options.insert("level_compaction_dynamic_level_bytes", "true");
 
         let options = options.set_db_options_from_map(&db_options).unwrap();
-        let _options = options.set_cf_options_from_map(&cf_options).unwrap();
+        let _options = options
+            .set_cf_options_from_map(
+                &cf_options,
+                Cache::from_string(DEFAULT_BLOCK_CACHE).unwrap(),
+            )
+            .unwrap();
     }
 
     #[test]
@@ -1328,7 +1672,9 @@ mod tests {
 
         map.insert("bogus_option", "100");
 
-        let _options = options.set_cf_options_from_map(&map).unwrap();
+        let _options = options
+            .set_cf_options_from_map(&map, Cache::from_string(DEFAULT_BLOCK_CACHE).unwrap())
+            .unwrap();
     }
 
     #[test]
@@ -1398,7 +1744,7 @@ mod tests {
         options.set_column_family_merge_operator(
             "bar",
             "my_operator",
-            Box::new(|_, _, _| None),
+            Arc::new(|_, _, _| None),
             None,
         )?;
         let json = serde_json::to_string(&options).unwrap();
@@ -1442,7 +1788,7 @@ mod tests {
         options.set_db_path("/tmp/db_path");
         options.add_column_family("foo");
         options.set_column_family_path("foo", "/tmp/db_path/foo");
-        let (_options, _cfs) = options.into_components()?;
+        let _components = options.into_components()?;
 
         // Testing that these options actually get applied properly by rocks is done in the DB
         // tests, not here
@@ -1450,7 +1796,7 @@ mod tests {
     }
 
     fn test_db_options_stats_level(options: DbOptions, level: StatsLevel) -> Result<()> {
-        let (options, _cfs) = options.into_components()?;
+        let DbComponents { options, .. } = options.into_components()?;
 
         let opts_ptr = options.inner;
         let is_enabled = level != StatsLevel::Disabled;
@@ -1521,7 +1867,10 @@ mod tests {
         // Now build the options structs.
         //
         // The default and `bar` CFs will get the default 32K block size, while `foo` gets 64K.
-        let (_options, cfs) = options.into_components()?;
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
 
         // `cfs` will contain the CFs that were explicitly added and the dfault.  There is an implied `default` CF
         // also whose parameters are controlled by what's set in `options`
@@ -1630,7 +1979,7 @@ mod tests {
         let mut options = DbOptions::default();
         options.set_logger(log::LevelFilter::Debug, logger);
 
-        let (mut options, _) = options.into_components().unwrap();
+        let DbComponents { mut options, .. } = options.into_components().unwrap();
 
         options.with_logger(|logger: Option<_>| {
             let logger =
@@ -1639,5 +1988,251 @@ mod tests {
         });
 
         assert_eq!(*context.lock().unwrap(), new_context.fields());
+    }
+
+    /// By default, when no `block_cache` options are set and no explicit `Cache` instance is
+    /// provided, a new cache is created and all CFs share that same cache.
+    #[test]
+    fn default_block_cache_is_shared() -> Result<()> {
+        let mut options = DbOptions::default();
+        options.add_column_family("foo");
+        options.add_column_family("bar");
+
+        // Now build the options structs.
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
+
+        // All column families should use the same block cache pointer
+        let default_cf = cfs
+            .iter()
+            .find(|cf| cf.name == DEFAULT_CF_NAME)
+            .expect("BUG: missing default CF");
+        let default_cache = get_block_cache(&default_cf.options);
+
+        let (capacity, usage) = get_cache_stats(default_cache);
+        assert_eq!(0, usage); // all CFs are empty and nothing has been read to the cache should be empty
+        assert_eq!(1024 * 1024 * 1024, capacity); // 1GB is the default block cache size
+
+        for cf in cfs.into_iter() {
+            let cache = get_block_cache(&cf.options);
+            println!("{}: {:?}", cf.name, cache);
+            assert_eq!(default_cache, cache, "CF name: {}", cf.name);
+        }
+
+        Ok(())
+    }
+
+    /// By default, if no CF gets a separate block cache config, all CFs in a DB share the same
+    /// block cache.  This should be true even if other block-based table factory options are
+    /// overridden at the CF level
+    #[test]
+    fn custom_block_config_still_uses_default_block_cache() -> Result<()> {
+        let mut options = DbOptions::default();
+
+        // `foo` has a custom block size, but because the cache setting is not modified it should
+        // still share the same default cache
+        options.add_column_family_opts(
+            "foo",
+            &hashmap!["block_based_table_factory" => "block_size=64K"],
+        );
+
+        // `bar` inherits all CF settings from default, including the default cache
+        options.add_column_family("bar");
+
+        // Now build the options structs.
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
+
+        // `cfs` will contain the CFs that were explicitly added and the dfault.  There is an implied `default` CF
+        // also whose parameters are controlled by what's set in `options`
+        assert!(cfs.iter().any(|cf| cf.name == "foo"));
+        assert!(cfs.iter().any(|cf| cf.name == "bar"));
+        assert!(cfs.iter().any(|cf| cf.name == DEFAULT_CF_NAME));
+        assert_eq!(3, cfs.len());
+
+        // All column families should use the same block cache pointer
+        let default_cf = cfs
+            .iter()
+            .find(|cf| cf.name == DEFAULT_CF_NAME)
+            .expect("BUG: missing default CF");
+        let default_cache = get_block_cache(&default_cf.options);
+
+        let (capacity, usage) = get_cache_stats(default_cache);
+        assert_eq!(0, usage); // all CFs are empty and nothing has been read to the cache should be empty
+        assert_eq!(1024 * 1024 * 1024, capacity); // 1GB is the default block cache size
+
+        for cf in cfs.into_iter() {
+            let cache = get_block_cache(&cf.options);
+            println!("{}: {:?}", cf.name, cache);
+            assert_eq!(default_cache, cache, "CF name: {}", cf.name);
+        }
+
+        Ok(())
+    }
+
+    /// It's possible to give a single CF its own block cache, by configuring block cache options
+    /// at the CF level
+    #[test]
+    fn cf_with_custom_block_cache() -> Result<()> {
+        let mut options = DbOptions::default();
+
+        // foo will get the default options
+        options.add_column_family("foo");
+
+        // bar gets a custom block based table factory config
+        options.add_column_family_opts(
+            "bar",
+            &hashmap!["block_based_table_factory" => "block_cache=512M"],
+        );
+
+        // Now build the options structs.
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
+
+        // `default` and `foo` should share the same cache
+        let default_cf = cfs
+            .iter()
+            .find(|cf| cf.name == DEFAULT_CF_NAME)
+            .expect("BUG: missing default CF");
+        let default_cache = get_block_cache(&default_cf.options);
+
+        let (capacity, usage) = get_cache_stats(default_cache);
+        assert_eq!(0, usage); // all CFs are empty and nothing has been read to the cache should be empty
+        assert_eq!(1024 * 1024 * 1024, capacity); // 1GB is the default block cache size
+
+        let foo_cf = cfs.iter().find(|cf| cf.name == "foo").unwrap();
+        let foo_cache = get_block_cache(&foo_cf.options);
+        assert_eq!(default_cache, foo_cache);
+
+        // Meanwhile `bar` should have a separate cache
+        let bar_cf = cfs.iter().find(|cf| cf.name == "bar").unwrap();
+        let bar_cache = get_block_cache(&bar_cf.options);
+        assert_ne!(default_cache, bar_cache);
+
+        let (capacity, usage) = get_cache_stats(bar_cache);
+        assert_eq!(0, usage);
+        assert_eq!(512 * 1024 * 1024, capacity);
+
+        Ok(())
+    }
+
+    /// With a pre-existing `Cache` instance is set as the default block cache in the DB config,
+    /// this cache is used by all CFs
+    #[test]
+    fn concrete_default_block_cache_is_shared() -> Result<()> {
+        let mut options = DbOptions::default();
+        options.add_column_family("foo");
+        options.add_column_family("bar");
+
+        let cache = Cache::with_capacity(10_000_000)?;
+
+        options.set_default_block_cache(cache.clone());
+
+        // Now build the options structs.
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
+
+        // All column families should use the given block cache
+        for cf in cfs.into_iter() {
+            let cache_ptr = get_block_cache(&cf.options);
+            unsafe {
+                assert_eq!(cache.rocksdb_cache_ptr(), cache_ptr, "CF name: {}", cf.name);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// For both default and non-default CFs, an explicit `Cache` instance always trumps a cache
+    /// config on an options string
+    #[test]
+    fn concrete_block_cache_overrides_options_string() -> Result<()> {
+        let mut options = DbOptions::default();
+        // Set default table options that specify a 2MB cache, but also set a concrete `Cache`
+        // instance as the default block cache.
+        options.set_default_cf_block_table_options(hashmap!["block_cache" => "2MB"]);
+        let default_cache = Cache::with_capacity(10_000_000)?;
+        options.set_default_block_cache(default_cache.clone());
+
+        // Add `foo` CF without any additional block table options
+        options.add_column_family("foo");
+
+        // Configure bar with a `block_cache` option, plus a separate `Cache` instance
+        let bar_cache = Cache::with_capacity(5_000_000)?;
+        options.add_column_family_opts(
+            "bar",
+            &hashmap!["block_based_table_factory" => "block_cache=512M"],
+        );
+        options.set_column_family_block_cache("bar", bar_cache.clone());
+
+        // Now build the options structs.
+        let DbComponents {
+            column_families: cfs,
+            ..
+        } = options.into_components()?;
+
+        // Both of the `block_cache` options should have been ignored, and instead the explicit
+        // `Cache` objects used
+        unsafe {
+            let default_cf = cfs
+                .iter()
+                .find(|cf| cf.name == DEFAULT_CF_NAME)
+                .expect("BUG: missing default CF");
+            let default_cache_ptr = get_block_cache(&default_cf.options);
+            assert_eq!(default_cache.rocksdb_cache_ptr(), default_cache_ptr);
+
+            // foo should be using the default
+            let foo_cf = cfs.iter().find(|cf| cf.name == "foo").unwrap();
+            let foo_cache_ptr = get_block_cache(&foo_cf.options);
+            assert_eq!(default_cache.rocksdb_cache_ptr(), foo_cache_ptr);
+
+            // Meanwhile `bar` should have a separate cache, the one we explicitly created
+            let bar_cf = cfs.iter().find(|cf| cf.name == "bar").unwrap();
+            let bar_cache_ptr = get_block_cache(&bar_cf.options);
+            assert_eq!(bar_cache.rocksdb_cache_ptr(), bar_cache_ptr);
+        }
+
+        Ok(())
+    }
+
+    // Unfortunately the rocks C FFI bindings don't provide a way to get the options passed, only to
+    // set them.  So we have to reach deep down in the C++ code
+    fn get_block_cache(options: &Options) -> *mut libc::c_void {
+        let options_ptr = options.inner;
+        unsafe {
+            cpp!([options_ptr as "const rocksdb::Options*"] -> *mut libc::c_void as "const void*" {
+                // HACK: we're just assuming that the table factory is a block-based table
+                // factory.  If not...boom!
+                auto* factory = reinterpret_cast<const rocksdb::BlockBasedTableFactory*>(options_ptr->table_factory.get());
+
+                // see the implementation of this gem in db_options.h for more nauseating C++
+                // debauchery
+                auto* cache = HackBBTF::GetCacheFromBlockBasedTableFactory(factory);
+
+                return cache;
+            })
+        }
+    }
+
+    /// Given a pointer to a RocksDB C++ Cache object, get the capacity and usage of the cache
+    fn get_cache_stats(cache_ptr: *const libc::c_void) -> (isize, isize) {
+        unsafe {
+            let capacity = cpp!([cache_ptr as "const rocksdb::Cache*"] -> isize as "size_t" {
+                return cache_ptr->GetCapacity();
+            });
+            let usage = cpp!([cache_ptr as "const rocksdb::Cache*"] -> isize as "size_t" {
+                return cache_ptr->GetUsage();
+            });
+
+            (capacity, usage)
+        }
     }
 }

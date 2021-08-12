@@ -5,6 +5,7 @@
 use std::path::Path;
 use tempfile::TempDir;
 
+mod cache;
 mod db;
 mod db_options;
 mod error;
@@ -21,7 +22,7 @@ mod logging;
 mod mem;
 mod merge;
 mod metrics;
-mod ops;
+pub(crate) mod ops;
 mod perf;
 mod stats;
 mod status;
@@ -39,6 +40,7 @@ pub mod future {
 }
 
 // Export the types we want to share from each module here at the root of the crate
+pub use cache::Cache;
 use cheburashka::logging::prelude::*;
 pub use checkpoint::Checkpoint;
 pub use checkpoint::*;

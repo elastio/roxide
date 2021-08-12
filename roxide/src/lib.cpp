@@ -21,25 +21,31 @@ namespace rocksdb_hack {
           rocksdb::OptimisticTransactionDB* rep;
         };
 
-	struct rocksdb_column_family_handle_t  { rocksdb::ColumnFamilyHandle* rep; };
+        struct rocksdb_column_family_handle_t  { rocksdb::ColumnFamilyHandle* rep; };
 
-	struct rocksdb_transaction_t {
-	    rocksdb::Transaction* rep;
-	};
+        struct rocksdb_transaction_t {
+            rocksdb::Transaction* rep;
+        };
 
-    struct rocksdb_dbpath_t {
-        rocksdb::DbPath rep;
-    };
+          struct rocksdb_dbpath_t {
+              rocksdb::DbPath rep;
+          };
 
-	struct rocksdb_readoptions_t {
-	    rocksdb::ReadOptions rep;
-	   // stack variables to set pointers to in ReadOptions
-	    rocksdb::Slice upper_bound;
-	    rocksdb::Slice lower_bound;
-	};
-	struct rocksdb_writeoptions_t    { rocksdb::WriteOptions      rep; };
-	struct rocksdb_options_t         { rocksdb::Options           rep; };
-    struct rocksdb_flushoptions_t    { rocksdb::FlushOptions      rep; };
+        struct rocksdb_readoptions_t {
+            rocksdb::ReadOptions rep;
+           // stack variables to set pointers to in ReadOptions
+            rocksdb::Slice upper_bound;
+            rocksdb::Slice lower_bound;
+        };
+        struct rocksdb_writeoptions_t    { rocksdb::WriteOptions      rep; };
+        struct rocksdb_options_t         { rocksdb::Options           rep; };
+        struct rocksdb_flushoptions_t    { rocksdb::FlushOptions      rep; };
+        struct rocksdb_cache_t {
+          std::shared_ptr<rocksdb::Cache> rep;
+        };
+        struct rocksdb_checkpoint_t {
+            rocksdb::Checkpoint* rep;
+        };
     }
 }
 
@@ -123,6 +129,23 @@ rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options) 
 
 rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options) {
     return cast_to_flush_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_flushoptions_t*>(options));
+}
+
+rocksdb::Cache* cast_to_cache(::rocksdb_cache_t* cache) {
+    auto casted_cache = reinterpret_cast<struct rocksdb_hack::rocksdb_cache_t*>(cache);
+    return casted_cache->rep.get();
+}
+
+rocksdb::Checkpoint* cast_to_checkpoint(::rocksdb_checkpoint_t* checkpoint) {
+    auto casted_checkpoint = reinterpret_cast<struct rocksdb_hack::rocksdb_checkpoint_t*>(checkpoint);
+    return casted_checkpoint->rep;
+}
+
+::rocksdb_cache_t* wrap_cache(std::shared_ptr<rocksdb::Cache> cache) {
+    auto c = new rocksdb_hack::rocksdb_cache_t;
+    c->rep.swap(cache);
+
+    return reinterpret_cast<struct ::rocksdb_cache_t*>(c);
 }
 
 rocksdb::Slice string_as_slice(const char* string, size_t len) {
