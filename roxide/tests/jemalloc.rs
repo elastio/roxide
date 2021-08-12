@@ -2,11 +2,11 @@
 
 #[cfg(feature = "jemalloc")]
 mod jemalloc_enabled {
-    use more_asserts::*;
     use jemalloc_ctl::{epoch, stats};
+    use more_asserts::*;
     use roxide::Result;
     use roxide::TempDbPath;
-    use roxide::{self, DbOpen, BeginTrans, Get, Put, TransactionDb, DbLike, Cache};
+    use roxide::{self, BeginTrans, Cache, DbLike, DbOpen, Get, Put, TransactionDb};
 
     /// Allocate a block cache; that should allocate some memory in jemalloc
     #[test]
