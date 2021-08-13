@@ -76,7 +76,7 @@ impl Checkpoint {
             ffi_try!(ffi::rocksdb_checkpoint_create(
                 checkpoint.as_ptr(),
                 cpath.as_ptr(),
-                20 * 1024 * 1024, // Experiment: 20MB
+                64 * 1024 * 1024, // Experiment: 20MB
             ))?;
         }
 
