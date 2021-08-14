@@ -21,7 +21,11 @@ zstd = []
 zlib = []
 bzip2 = []
 
+# Enable jemalloc support in RocksDB
+jemalloc = ["jemalloc-sys"]
+
 [dependencies]
+jemalloc-sys = { version = "0.3", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 libc = "0.2"
 
 [dev-dependencies]

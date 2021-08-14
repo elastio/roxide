@@ -65,6 +65,8 @@ jobs:
 
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
+      # Run clippy with default features, and also with all features
+      - run: cargo clippy --workspace --all-targets
       - run: cargo clippy --workspace --all-targets --all-features
 
   rust-test:
@@ -92,7 +94,9 @@ jobs:
           profile: minimal
 
       - run: cargo test --workspace --no-run
+      # Test with default features and all features
       - run: cargo test --workspace
+      - run: cargo test --workspace --all-features
 
   rust-code-coverage:
     runs-on: ubuntu-latest
