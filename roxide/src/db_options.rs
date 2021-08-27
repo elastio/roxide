@@ -992,7 +992,7 @@ impl DbOptions {
     /// This function is taken from `options_helper.cc` as well.
     /// Needed for `parse_options_string`.
     fn next_token(opts: &str, delimiter: char, mut pos: usize) -> (Option<usize>, String) {
-        while pos < opts.len() && Self::char_at(&opts, pos).is_whitespace() {
+        while pos < opts.len() && Self::char_at(opts, pos).is_whitespace() {
             pos += 1;
         }
 
@@ -1030,7 +1030,7 @@ impl DbOptions {
                     panic!("Unexpected chars after nested options");
                 }
 
-                return (Some(pos), token.to_string());
+                (Some(pos), token.to_string())
             } else {
                 panic!("Mismatched curly braces for nested options");
             }
@@ -1041,7 +1041,7 @@ impl DbOptions {
                 Some(end) => opts[pos..end].trim(),
             };
 
-            return (end, token.to_owned());
+            (end, token.to_owned())
         }
     }
 
@@ -1058,7 +1058,7 @@ impl DbOptions {
         for (key, value) in opts.iter() {
             // Inner option maps should be wrapped in braces.
             let mut value = value.to_string();
-            if value.contains("=") {
+            if value.contains('=') {
                 value = format!("{{{}}}", value).to_string();
             }
             opts_str.push_str(&format!("{}={};", key.to_string(), value));
