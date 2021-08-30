@@ -979,7 +979,7 @@ impl DbOptions {
             }
 
             let (end, value) = Self::next_token(opts, ';', eq_pos + 1);
-            opts_map.insert(key.to_string(), value);
+            opts_map.insert(key.to_string(), value.to_string());
             match end {
                 None => break,
                 Some(end) => pos = end + 1,
@@ -991,14 +991,14 @@ impl DbOptions {
 
     /// This function is taken from `options_helper.cc` as well.
     /// Needed for `parse_options_string`.
-    fn next_token(opts: &str, delimiter: char, mut pos: usize) -> (Option<usize>, String) {
+    fn next_token(opts: &str, delimiter: char, mut pos: usize) -> (Option<usize>, &str) {
         while pos < opts.len() && Self::char_at(opts, pos).is_whitespace() {
             pos += 1;
         }
 
         // Empty value at the end
         if pos >= opts.len() {
-            return (None, String::new());
+            return (None, "");
         }
 
         if Self::char_at(opts, pos) == '{' {
@@ -1030,7 +1030,7 @@ impl DbOptions {
                     panic!("Unexpected chars after nested options");
                 }
 
-                (Some(pos), token.to_string())
+                (Some(pos), token)
             } else {
                 panic!("Mismatched curly braces for nested options");
             }
@@ -1041,7 +1041,7 @@ impl DbOptions {
                 Some(end) => opts[pos..end].trim(),
             };
 
-            (end, token.to_owned())
+            (end, token)
         }
     }
 
@@ -1059,7 +1059,7 @@ impl DbOptions {
             // Inner option maps should be wrapped in braces.
             let mut value = value.to_string();
             if value.contains('=') {
-                value = format!("{{{}}}", value).to_string();
+                value = format!("{{{}}}", value);
             }
             opts_str.push_str(&format!("{}={};", key.to_string(), value));
         }
@@ -1319,9 +1319,9 @@ impl Default for DbOptions {
                 // See comments to `pin_l0_filter_and_index_blocks_in_cache` and
                 // `pin_top_level_index_and_filter` above for details.
                 "metadata_cache_options={",
-                "top_level_index_pinning=kAll;",
-                "partition_pinning=kFlushedAndSimilar;",
-                "unpartitioned_pinning=kFlushedAndSimilar;",
+                    "top_level_index_pinning=kAll;",
+                    "partition_pinning=kFlushedAndSimilar;",
+                    "unpartitioned_pinning=kFlushedAndSimilar;",
                 "};",
 
                 // Use 15 bits for the bloom filter.  The `false` falue corresponds to the second
