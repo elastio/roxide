@@ -346,7 +346,7 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
             }
             Err(cause) => {
                 // Panic.  We'll propagate the panic, but first forget `me` so it doesn't get freed
-                // durng the unwind
+                // during the unwind
                 let _me_raw = me.into_raw_void();
 
                 std::panic::resume_unwind(cause);

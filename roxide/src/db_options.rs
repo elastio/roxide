@@ -374,7 +374,7 @@ impl DbOptions {
     /// Gets the current default block-based table factory options
     pub fn get_default_cf_block_table_options(&self) -> HashMap<String, String> {
         if let Some(opts_str) = self.default_cf_options.get("block_based_table_factory") {
-            Self::parse_options_string(opts_str)
+            Self::parse_options_string(opts_str.to_string())
         } else {
             // No such options
             HashMap::new()
@@ -525,7 +525,7 @@ impl DbOptions {
         let cf_name = cf_name.to_string();
         if let Some(cf_opts) = self.column_families.get(&cf_name) {
             if let Some(opts_str) = cf_opts.get("block_based_table_factory") {
-                Ok(Self::parse_options_string(opts_str))
+                Ok(Self::parse_options_string(opts_str.to_string()))
             } else {
                 // No such options
                 Ok(self.get_default_cf_block_table_options())
@@ -805,10 +805,10 @@ impl DbOptions {
                             // Thankfull the hack with Clone is only required for the `full` merge
                             // fn
                             let partial = move |key: &[u8],
-                                existing_value: Option<&[u8]>,
-                                operands: &mut crate::MergeOperands| {
-                                    partial(key, existing_value, operands)
-                                };
+                                                existing_value: Option<&[u8]>,
+                                                operands: &mut crate::MergeOperands| {
+                                partial(key, existing_value, operands)
+                            };
                             cf_opts.set_merge_operator(&operator_name, full, partial);
                         } else {
                             // There is no support for merging partial merge operands, so there's a
@@ -946,24 +946,103 @@ impl DbOptions {
         Ok(())
     }
 
+    fn char_at(s: &str, index: usize) -> char {
+        s[index..index + 1].chars().next().unwrap()
+    }
+
     /// Given some options in the RocksDB options string format, parses the options into a hash
     /// table.
-    fn parse_options_string(opts: impl AsRef<str>) -> HashMap<String, String> {
-        let pairs = opts.as_ref().split(';');
+    /// This function is the same as `StringToMap` from `options_helper.cc` in RocksDB, but written in Rust.
+    /// Options example:
+    ///   opts_str = "write_buffer_size=1024;max_write_buffer_number=2;"
+    ///              "nested_opt={opt1=1;opt2=2};max_bytes_for_level_base=100"
+    fn parse_options_string(opts: String) -> HashMap<String, String> {
+        let mut opts = opts.trim();
+        // If the input string starts and ends with "{...}", strip off the brackets
+        while opts.len() > 2
+            && Self::char_at(opts, 0) == '{'
+            && Self::char_at(opts, opts.len() - 1) == '}'
+        {
+            opts = &opts[1..opts.len() - 1];
+        }
 
-        let pairs = pairs.filter_map(|pair| {
-            let pair = pair.trim();
-
-            if !pair.is_empty() {
-                let pair: Vec<_> = pair.split('=').collect();
-
-                Some((pair[0].trim().to_string(), pair[1].trim().to_string()))
-            } else {
-                None
+        let mut opts_map = HashMap::new();
+        let mut pos: usize = 0;
+        while pos < opts.len() {
+            let eq_pos = pos
+                + opts[pos..]
+                    .find('=')
+                    .expect("Mismatched key value pair, '=' expected");
+            let key = opts[pos..eq_pos].trim();
+            if key.is_empty() {
+                panic!("Empty key found");
             }
-        });
 
-        pairs.collect()
+            let (end, value) = Self::next_token(opts, ';', eq_pos + 1);
+            opts_map.insert(key.to_string(), value.to_string());
+            match end {
+                None => break,
+                Some(end) => pos = end + 1,
+            }
+        }
+
+        opts_map
+    }
+
+    /// This function is taken from `options_helper.cc` as well.
+    /// Needed for `parse_options_string`.
+    fn next_token(opts: &str, delimiter: char, mut pos: usize) -> (Option<usize>, &str) {
+        while pos < opts.len() && Self::char_at(opts, pos).is_whitespace() {
+            pos += 1;
+        }
+
+        // Empty value at the end
+        if pos >= opts.len() {
+            return (None, "");
+        }
+
+        if Self::char_at(opts, pos) == '{' {
+            let mut count = 1;
+            let mut brace_pos: usize = pos + 1;
+            while brace_pos < opts.len() {
+                if Self::char_at(opts, brace_pos) == '{' {
+                    count += 1;
+                } else if Self::char_at(opts, brace_pos) == '}' {
+                    count -= 1;
+                    if count == 0 {
+                        break;
+                    }
+                }
+
+                brace_pos += 1;
+            }
+
+            // found the matching closing brace
+            if count == 0 {
+                let token = opts[pos + 1..brace_pos].trim();
+                // skip all whitespace and move to the next delimiter
+                // brace_pos points to the next position after the matching '}'
+                pos = brace_pos + 1;
+                while pos < opts.len() && Self::char_at(opts, pos).is_whitespace() {
+                    pos += 1;
+                }
+                if pos < opts.len() && Self::char_at(opts, pos) != delimiter {
+                    panic!("Unexpected chars after nested options");
+                }
+
+                (Some(pos), token)
+            } else {
+                panic!("Mismatched curly braces for nested options");
+            }
+        } else {
+            let end = opts[pos..].find(delimiter).map(|p| p + pos);
+            let token = match end {
+                None => opts[pos..].trim(),
+                Some(end) => opts[pos..end].trim(),
+            };
+
+            (end, token)
+        }
     }
 
     /// Constructs a RocksDB options string given a map of options
@@ -977,7 +1056,12 @@ impl DbOptions {
         let mut opts_str = String::new();
 
         for (key, value) in opts.iter() {
-            opts_str.push_str(&format!("{}={};", key.to_string(), value.to_string()));
+            // Inner option maps should be wrapped in braces.
+            let mut value = value.to_string();
+            if value.contains('=') {
+                value = format!("{{{}}}", value);
+            }
+            opts_str.push_str(&format!("{}={};", key.to_string(), value));
         }
 
         opts_str
@@ -1186,6 +1270,20 @@ impl Default for DbOptions {
                 // they're already in the cache
                 "cache_index_and_filter_blocks_with_high_priority=true;",
 
+                // DEPRECATED: This option will be removed in a future version. For now, this
+                // option still takes effect by updating
+                // `MetadataCacheOptions::top_level_index_pinning` when it has the
+                // default value, `PinningTier::kFallback`.
+                //
+                // The updated value is chosen as follows:
+                //
+                // - `pin_top_level_index_and_filter == false` ->
+                //   `PinningTier::kNone`
+                // - `pin_top_level_index_and_filter == true` ->
+                //   `PinningTier::kAll`
+                //
+                // To migrate away from this flag, explicitly configure
+                // `MetadataCacheOptions` as described above.
                 // Similar to `pin_l0...` except `pin_l0..` pins the entire filter/index
                 // blocks for L0 data files.  This pins the top-level (of the two levels
                 // enabled by `index_type`) index and filter _OF EACH SST_, on the theory
@@ -1194,11 +1292,37 @@ impl Default for DbOptions {
                 // may contain the data we need.  The second level index/filter blocks are also
                 // cached per `cache_index_and_filter_blocks`, but those blocks may or may not be
                 // pushed out of the cache depending on cache pressure.
-                "pin_top_level_index_and_filter=true;",
+                // "pin_top_level_index_and_filter=true;",
 
-                // Pin the L0 filterand index blocks in the cache so they are never pushed out by
+                // DEPRECATED: This option will be removed in a future version. For now, this
+                // option still takes effect by updating each of the following variables that
+                // has the default value, `PinningTier::kFallback`:
+                //
+                // - `MetadataCacheOptions::partition_pinning`
+                // - `MetadataCacheOptions::unpartitioned_pinning`
+                //
+                // The updated value is chosen as follows:
+                //
+                // - `pin_l0_filter_and_index_blocks_in_cache == false` ->
+                //   `PinningTier::kNone`
+                // - `pin_l0_filter_and_index_blocks_in_cache == true` ->
+                //   `PinningTier::kFlushedAndSimilar`
+                //
+                // To migrate away from this flag, explicitly configure
+                // `MetadataCacheOptions` as described above.
+                // Pin the L0 filter and index blocks in the cache so they are never pushed out by
                 // data blocks
-                "pin_l0_filter_and_index_blocks_in_cache=true;",
+                // "pin_l0_filter_and_index_blocks_in_cache=true;",
+
+                // New `metadata_cache_options` configuration option, introduced in RocksDb 6.15.0:
+                // https://github.com/facebook/rocksdb/blob/master/HISTORY.md#6150-2020-11-13
+                // See comments to `pin_l0_filter_and_index_blocks_in_cache` and
+                // `pin_top_level_index_and_filter` above for details.
+                "metadata_cache_options={",
+                    "top_level_index_pinning=kAll;",
+                    "partition_pinning=kFlushedAndSimilar;",
+                    "unpartitioned_pinning=kFlushedAndSimilar;",
+                "};",
 
                 // Use 15 bits for the bloom filter.  The `false` falue corresponds to the second
                 // parameter of the `NewBloomFilterPolicy` method, which is called
@@ -2199,6 +2323,29 @@ mod tests {
             let bar_cache_ptr = get_block_cache(&bar_cf.options);
             assert_eq!(bar_cache.rocksdb_cache_ptr(), bar_cache_ptr);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_rocksdb_config_string() -> Result<()> {
+        let opts_str = concat!(
+            "write_buffer_size=1024;",
+            "nested_opt={opt1=1;opt2=2};",
+            "max_bytes_for_level_base=100;",
+            "metadata_cache_options={",
+            "top_level_index_pinning=kAll;",
+            "partition_pinning=kFlushedAndSimilar;",
+            "unpartitioned_pinning=kFlushedAndSimilar;",
+            "};"
+        );
+
+        let map = DbOptions::parse_options_string(opts_str.to_string());
+        assert_eq!(map.len(), 4);
+        assert_eq!(map["write_buffer_size"], "1024");
+        assert_eq!(map["nested_opt"], "opt1=1;opt2=2");
+        assert_eq!(map["max_bytes_for_level_base"], "100");
+        assert_eq!(map["metadata_cache_options"], "top_level_index_pinning=kAll;partition_pinning=kFlushedAndSimilar;unpartitioned_pinning=kFlushedAndSimilar;");
 
         Ok(())
     }
