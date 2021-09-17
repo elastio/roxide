@@ -102,10 +102,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        toolchain: [nightly]
+        toolchain: [stable]
     env:
       RUSTFLAGS: '-Zinstrument-coverage'
       LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-%p-%m.profraw"
+      RUSTC_BOOTSTRAP: 1
 
     steps:
       - uses: actions/checkout@v2
@@ -116,38 +117,28 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.toolchain }}
 
-      - run: |
-          cargo +${{ matrix.toolchain }} test --workspace --all-targets --all-features
-          find . -name "*.profraw"
+      - run: cargo +${{ matrix.toolchain }} test --workspace --all-targets --all-features
 
       - name: Install grcov
         run: |
           rustup component add llvm-tools-preview
-          curl -L https://github.com/mozilla/grcov/releases/download/v0.7.1/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          curl -L https://github.com/mozilla/grcov/releases/download/v0.8.2/grcov-linux-x86_64.tar.bz2 | tar jxf -
 
       - name: Run grcov
         run: |
           # The `--ignore /*` exclues from coverage analysis anything in a cargo crate (meaning includes only this repo)
-          # The `--ignore target/*` ensures that we don't do coverage analysis on generated bindgen code which is pointless
           #
           # without that the `lcov.info` file will be 10s of MB and the shitty Node.js Coveralls importer will eat shit and die
-          ./grcov . --binary-path ./target/debug/ -t lcov -s . -o ./lcov.info  --branch --ignore-not-existing --ignore "/*" --ignore "target/*"
+          ./grcov . --binary-path ./target/debug/ -t lcov -s . -o ./lcov.info  --branch --ignore-not-existing --ignore "/*"
 
           # These commands help with debugging if coveralls ingest is failing
-          #file ./lcov.info
-          #du -h ./lcov.info
-          #head --bytes 10240 ./lcov.info
-          #cat ./lcov.info | grep SF:
-
-          # There's a compiled binary coveralls reporter which seems like someone's shitty side project
-          # It's written in Crystal, and seems to be very flaky.  However maybe in the future it'll be more mature
-          # and work better than the half-hearted Github Action which itself seems barely maintained
-          #wget -cq https://coveralls.io/coveralls-linux.tar.gz -O - | tar -xz
-          #./coveralls -f./lcov.info || echo coveralls shat the bed
-
+          file lcov.info
+          du -h lcov.info
+          head --bytes 10240 lcov.info
+          cat lcov.info | grep SF: || echo No source file information
 
       - name: Upload code coverage info
-        uses: coverallsapp/github-action@v1.1.2
+        uses: coverallsapp/github-action@1.1.3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "${{ github.workspace }}/lcov.info"
