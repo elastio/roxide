@@ -112,8 +112,8 @@ fn build_rocksdb() {
         add_define(&mut config, &mut defines, "JEMALLOC_NO_DEMANGLE", None);
 
         // We take a dep on the `jemalloc-sys` crate, which internally builds jemalloc from source
-        // into a static library.  It helpfully reports the root path where the static lib and
-        // headers are installed, in a variable called `root`.  Cargo will expose that to us in the
+        // into a static library. It helpfully reports the root path where the static lib and
+        // headers are installed, in a variable called `root`. Cargo will expose that to us in the
         // env var `DEP_JEMALLOC_ROOT`.
         let jemalloc_root = PathBuf::from(
             std::env::var("DEP_JEMALLOC_ROOT")
@@ -121,7 +121,7 @@ fn build_rocksdb() {
         );
 
         // jemalloc-sys will also tell cargo to link the jemalloc static library, and set the lib
-        // path.  All we need to do is set the include path
+        // path. All we need to do is set the include path
         include_paths.push(jemalloc_root.join("include"));
     }
 
@@ -241,8 +241,9 @@ fn build_rocksdb() {
     // Write an include file with the #define's used to build rocks, so that our downstream Rust
     // code (or rather the C++ code embedded in it with the cpp! macro) can use the same #defines
     // when it includes Rocks headers
-    let rust_include_path =
-        PathBuf::from(env::var("OUT_DIR").unwrap()).join("roxide-librocksdb-sys");
+    let rust_include_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("build")
+        .join("roxide-librocksdb-sys");
     std::fs::create_dir_all(&rust_include_path)
         .expect("Failed to create rust include file output directory");
     let cpp_defines_path = rust_include_path.join("cpp_defines.h");
@@ -291,7 +292,7 @@ fn build_rocksdb() {
         config.include(include.as_path());
     }
 
-    config.include(".");
+    config.include(env::var("CARGO_MANIFEST_DIR").unwrap());
 
     // Report the include paths via cargo so downstream crates can use them also
     let include_path = std::env::join_paths(include_paths).expect("join_paths failed");
@@ -300,35 +301,37 @@ fn build_rocksdb() {
         include_path.to_str().expect("to_str failed")
     );
 
-    //Build C++ wrapper files in the out dir which will `#include` every source file in the
-    //library.  This sucks compared to just calling `config.file` once for each source file, but
-    //that doesn't work. Why?  It's complicated.
+    // TODO: investigate if this hack is still needed
     //
-    //First: It's important to canonicalize the source file names.  the RocksDB logging system
-    //makes an assumption that the `__FILE__` intrinsic for all source *and* header files that
-    //interact with the logging system will all have the same shared prefix.  Since dependent
-    //crates (like `rocksdb`) will use the absolute path to the header files, and therefore the
-    //absolute path will be in the `__FILE__` intrinsic for those headers, the RocksDB source
-    //files must be compiled such that their `__FILE__` intrinsic has the same absolute path,
-    //otherwise the log output is corrupted.
+    // Build C++ wrapper files in the out dir which will `#include` every source file in the
+    // library. This sucks compared to just calling `config.file` once for each source file, but
+    // that doesn't work. Why? It's complicated.
     //
-    //For the same reason, include paths are canonicalized above with `canonically_include`
+    // First: It's important to canonicalize the source file names. the RocksDB logging system
+    // makes an assumption that the `__FILE__` intrinsic for all source *and* header files that
+    // interact with the logging system will all have the same shared prefix. Since dependent
+    // crates (like `rocksdb`) will use the absolute path to the header files, and therefore the
+    // absolute path will be in the `__FILE__` intrinsic for those headers, the RocksDB source
+    // files must be compiled such that their `__FILE__` intrinsic has the same absolute path,
+    // otherwise the log output is corrupted.
     //
-    //So why does that require us to do this hack with making dummy files in OUT_DIR?  Due to a bug in the `cc`
-    //crate:
-    //`config.file()` needs to determine a suitable name for the `.o` file that gets produced when
-    //compiling this file.  How does it do that?  Well, if `file` is relative then it's easy: it
-    //just appends `file` to the dest dir and adds `.o  But if `file` is absolute, then it appends
-    //only the file NAME to the dest dir.  That would be find except the RocksDB code has multiple
-    //files with the name `format.cc` in different directories, and this means they clobber
-    //eachother on output leading to linker errors that are hard to debug.
+    // For the same reason, include paths are canonicalized above with `canonically_include`
+    //
+    // So why does that require us to do this hack with creating dummy files in `build/`?
+    // Due to a bug in `cc` crate:
+    // `config.file()` needs to determine a suitable name for the `.o` file that gets produced when
+    // compiling this file. How does it do that? Well, if `file` is relative then it's easy: it
+    // just appends `file` to the dest dir and adds `.o But if `file` is absolute, then it appends
+    // only the file NAME to the dest dir. That would be fine except that RocksDB code has multiple
+    // files with the name `format.cc` in different directories, and this means they clobber
+    // eachother on output leading to linker errors that are hard to debug.
     for file in lib_sources {
         if !file.is_empty() {
             let file = "rocksdb/".to_string() + file;
 
-            // Make a file with path `file` relative to `OUT_DIR`, that does nothing but #include
+            // Make a file with path `file` relative to `build/`, that does nothing but #include
             // the fully-qualified path of the actual source file in the RocksDB library soruces
-            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+            let out_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("build");
             let dummy_file_path = out_path.join(&file);
             if let Some(parent) = dummy_file_path.parent() {
                 std::fs::create_dir_all(parent)
@@ -359,6 +362,7 @@ fn build_rocksdb() {
 
     config.file("build_version.cc");
     config.cpp(true);
+    config.__set_env("CCACHE_BASEDIR", env::var("CARGO_MANIFEST_DIR").unwrap());
     config.compile("librocksdb.a");
 }
 
