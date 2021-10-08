@@ -61,9 +61,11 @@ pub enum SubCode {
     PathNotFound = 9,
 }
 
+// All variants have the same `Error` postfix, but we silence this warning to match RocksDB naming
 /// The possible error severity levels.
 ///
 /// Copy/pasted from the C++ code in `include/rocksdb/status.h`
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum Severity {

@@ -3,7 +3,7 @@
 // not on the 4-character indentation boundary :(
 use crate::db::{db::*, opt_txdb::*, txdb::*, ColumnFamilyHandle};
 use crate::db_options::prelude::*;
-use crate::error::prelude::*;
+use crate::error::{self, prelude::*};
 use crate::ffi;
 use crate::ffi_try;
 use crate::ffi_util::{path_to_cstring, path_to_string};
@@ -270,7 +270,7 @@ where
     // From the DBOptions make the RocksDB components
     let components = db_options.clone().into_components()?;
 
-    fs::create_dir_all(&path).context(PathMkdirFailed {
+    fs::create_dir_all(&path).context(error::PathMkdirFailed {
         path: path.as_ref().to_owned(),
     })?;
     let path = path_to_string(path)?;
@@ -307,9 +307,9 @@ where
     let db = ptr::NonNull::new(db)
         .ok_or_else(|| Error::other_error(format!("failed to open database at '{}'", path)))?;
 
-    // Convert the resulting handles into name/handle pairs, detecting errors along the
-    // way
-    let cf_results: Vec<Result<_>> = cf_handle_ptrs
+    // Convert the resulting handles into name/handle pairs, detecting errors along the way.
+    // If Result::Err(...) in iterator is encountered, Result::Err(...) is returned immediately.
+    let cf_map_result: Result<HashMap<_, _>> = cf_handle_ptrs
         .into_iter()
         .zip(components.column_families.into_iter())
         .map(
@@ -323,17 +323,7 @@ where
         )
         .collect();
 
-    // Collect any errors from the results and return them immediately.  if no error
-    // then proceed
-    let cf_results: Result<Vec<_>> = cf_results.into_iter().collect();
-    let cf_results = cf_results?;
-
-    Ok((
-        db,
-        components.block_cache,
-        db_options,
-        cf_results.into_iter().collect(),
-    ))
+    Ok((db, components.block_cache, db_options, cf_map_result?))
 }
 
 #[cfg(test)]

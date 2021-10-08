@@ -41,6 +41,9 @@ lazy_static! {
     .unwrap();
 }
 
+// TODO: remove "Error" postfix from enum variants, release new major version
+// (because it will be a breaking change) and fix all usages of `roxide::Error` in `scalez-kv`
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Snafu, AsRefStr)]
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
