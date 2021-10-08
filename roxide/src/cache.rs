@@ -1,5 +1,6 @@
 //! Wrap the RocksDB `LRUCache` in a Rust type allowing callers to configure block caching at the
 //! DB or CF level
+use crate::error;
 use crate::ffi;
 use crate::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -61,7 +62,7 @@ impl Cache {
         let cache_ptr = unsafe { ffi::rocksdb_cache_create_lru(capacity) };
 
         if cache_ptr.is_null() {
-            crate::error::RocksDbCacheAlloc { capacity }.fail()
+            error::RocksDbCacheAlloc { capacity }.fail()
         } else {
             unsafe { Ok(Self::from_rocksdb_cache(cache_ptr)) }
         }
@@ -129,7 +130,7 @@ impl Cache {
             });
 
             if cache_ptr.is_null() {
-                crate::error::RocksDbCacheParse {
+                error::RocksDbCacheParse {
                     value: value.to_string(),
                 }
                 .fail()

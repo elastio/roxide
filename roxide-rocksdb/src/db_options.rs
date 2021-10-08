@@ -3149,7 +3149,9 @@ impl Default for IngestExternalFileOptions {
     }
 }
 
+// All variants have the same `Search` postfix, but we silence this warning to match RocksDB naming
 /// Used by BlockBasedOptions::set_index_type.
+#[allow(clippy::enum_variant_names)]
 pub enum BlockBasedIndexType {
     /// A space efficient index block that is optimized for
     /// binary-search-based index.

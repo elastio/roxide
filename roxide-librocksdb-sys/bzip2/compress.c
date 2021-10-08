@@ -512,6 +512,9 @@ void sendMTFValues ( EState* s )
 
       if (s->verbosity >= 3) 
          VPrintf1( "      bytes: mapping %d, ", s->numZ-nBytes );
+      // Silence false positive `-Wunused-but-set-variable`
+      // (it's clearly used in `if` blocks)
+      (void)nBytes;
    }
 
    /*--- Now the selectors. ---*/

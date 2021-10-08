@@ -329,6 +329,8 @@ impl RocksProperty {
     }
 }
 
+// All variants have the same `Value` postfix, but we silence this warning to match RocksDB naming
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum RocksPropertyValue {
     StringValue(String),

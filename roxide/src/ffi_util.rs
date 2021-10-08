@@ -13,8 +13,7 @@
 // limitations under the License.
 //
 
-use crate::error;
-use crate::error::prelude::*;
+use crate::error::{self, prelude::*};
 use libc::{self, c_char, c_void};
 use std::collections::HashMap;
 use std::ffi;
@@ -94,7 +93,7 @@ pub(crate) fn path_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
 }
 
 pub(crate) fn path_to_cstring<P: AsRef<Path>>(path: P) -> Result<CString> {
-    CString::new(path_to_string(path.as_ref())?).context(PathHasNullBytes {
+    CString::new(path_to_string(path.as_ref())?).context(error::PathHasNullBytes {
         path: path.as_ref().to_owned(),
     })
 }
@@ -213,12 +212,13 @@ pub(crate) unsafe fn free_rocks_slices_vector(rocks_slices: *mut std::ffi::c_voi
     });
 }
 
-/// Helper for cases where we has a `dyn T` for some trait `T`, and we want to be able to represent
-/// it as a thin pointer (meaning a regular C pointer).  `Arc::into_raw` loses the vtable
+/// Helper for cases where we have a `dyn T` for some trait `T`, and we want to be able to represent
+/// it as a thin pointer (meaning a regular C pointer). `Arc::into_raw` loses the vtable
 /// information when used with a `dyn` trait, so internally this struct just uses an Arc in a Box.
 ///
 /// Using `Arc<T>` for the inner payload instead of `Box<T>` (which is what was used initially)
 /// means that this is trivially `clone()`able.
+#[allow(clippy::redundant_allocation)]
 pub(crate) struct DynTraitArc<T: ?Sized>(Box<Arc<T>>);
 
 impl<T: ?Sized> DynTraitArc<T> {
