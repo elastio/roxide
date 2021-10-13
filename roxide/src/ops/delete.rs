@@ -62,7 +62,7 @@ pub trait Delete: RocksOpBase {
                 let options = WriteOptions::from_option(options.into());
 
                 unsafe {
-                    reporter.processing_item(key.as_slice().len(), None, || {
+                    reporter.processing_item(key.len(), None, || {
                         Self::raw_delete(
                             self.handle(),
                             cf.rocks_ptr(),
@@ -91,7 +91,7 @@ pub trait Delete: RocksOpBase {
 
                 let keys = keys.into_iter();
                 let results = keys.map(|key| unsafe {
-                    reporter.processing_item(key.as_slice().len(), None, || {
+                    reporter.processing_item(key.len(), None, || {
                         Self::raw_delete(
                             self.handle(),
                             cf.rocks_ptr(),
@@ -131,7 +131,7 @@ pub trait Delete: RocksOpBase {
                 reporter.run_blocking_task(move |reporter| {
                     let keys = keys.into_iter();
                     let results = keys.map(|key| unsafe {
-                        reporter.processing_item(key.as_slice().len(), None, || {
+                        reporter.processing_item(key.len(), None, || {
                             Self::raw_delete(
                                 &handle,
                                 cf.rocks_ptr(),
@@ -174,7 +174,7 @@ pub trait Delete: RocksOpBase {
 
                 reporter.run_blocking_task(move |reporter| {
                     unsafe {
-                        reporter.processing_item(key.as_slice().len(), None, || {
+                        reporter.processing_item(key.len(), None, || {
                             Self::raw_delete(
                                 &handle,
                                 cf.rocks_ptr(),
@@ -230,7 +230,7 @@ pub trait DeleteRange: RocksOpBase {
                 let key_range = key_range.into();
 
                 unsafe {
-                    reporter.processing_item(key_range.start().as_slice().len(), None, || {
+                    reporter.processing_item(key_range.start().len(), None, || {
                         Self::raw_delete_range(
                             self.handle(),
                             cf.rocks_ptr(),
@@ -266,7 +266,7 @@ pub trait DeleteRange: RocksOpBase {
                 let ranges = ranges.into_iter();
                 let results = ranges.map(|range| unsafe {
                     let range = range.into();
-                    reporter.processing_item(range.start().as_slice().len(), None, || {
+                    reporter.processing_item(range.start().len(), None, || {
                         Self::raw_delete_range(
                             self.handle(),
                             cf.rocks_ptr(),
@@ -314,7 +314,7 @@ pub trait DeleteRange: RocksOpBase {
                     let ranges = ranges.into_iter();
                     let results = ranges.map(|range| unsafe {
                         let range = range.into();
-                        reporter.processing_item(range.start().as_slice().len(), None, || {
+                        reporter.processing_item(range.start().len(), None, || {
                             Self::raw_delete_range(
                                 &handle,
                                 cf.rocks_ptr(),
@@ -363,7 +363,7 @@ pub trait DeleteRange: RocksOpBase {
                 reporter.run_blocking_task(move |reporter| {
                     unsafe {
                         let range = range.into();
-                        reporter.processing_item(range.start().as_slice().len(), None, || {
+                        reporter.processing_item(range.start().len(), None, || {
                             Self::raw_delete_range(
                                 &handle,
                                 cf.rocks_ptr(),
@@ -526,6 +526,33 @@ impl Delete for sync::Transaction {
             move |_reporter| {
                 self.async_with_tx(move |tx| tx.multi_delete(&cf_clone, keys, options))
             },
+        )
+    }
+
+    /// Like `async_delete`, but operates on a single scalar value.
+    ///
+    /// It's not clear if this is a good approach.  Is the async overhead too high for a single
+    /// record?  More testing is needed.
+    ///
+    /// [`sync::Transaction`] lacks `raw_delete(...)` method, so we override
+    /// the default implementation located in [`Delete::async_delete_scalar`],
+    /// otherwise it would panic
+    fn async_delete_scalar<CF: db::ColumnFamilyLike, K: BinaryStr + Send + 'static>(
+        &self,
+        cf: &CF,
+        key: K,
+        options: impl Into<Option<WriteOptions>>,
+    ) -> op_metrics::AsyncOpFuture<()>
+    where
+        <Self as RocksOpBase>::HandleType: Sync + Send,
+    {
+        let options = options.into();
+        let cf_clone = cf.clone();
+
+        op_metrics::instrument_async_cf_op(
+            cf,
+            op_metrics::ColumnFamilyOperation::AsyncDelete,
+            move |_reporter| self.async_with_tx(move |tx| tx.delete(&cf_clone, key, options)),
         )
     }
 }
@@ -835,7 +862,7 @@ mod test {
     }
 
     #[test]
-    fn tx_multi_delete() -> Result<()> {
+    fn unsync_tx_multi_delete() -> Result<()> {
         let path = TempDbPath::new();
         let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
@@ -874,6 +901,23 @@ mod test {
         for key in &keys {
             assert_eq!(None, db.get(&cf, &key, None)?);
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn sync_tx_async_delete_scalar() -> Result<()> {
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+        let tx = db.begin_trans(None, None)?.into_sync();
+
+        let key = random_key();
+
+        tx.put(&cf, key.clone(), b"foo", None)?;
+        tx.async_delete_scalar(&cf, key.clone(), None).await?;
+
+        assert_eq!(None, db.get(&cf, key, None)?);
 
         Ok(())
     }
