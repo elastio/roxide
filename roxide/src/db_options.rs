@@ -811,9 +811,15 @@ impl DbOptions {
                             };
                             cf_opts.set_merge_operator(&operator_name, full, partial);
                         } else {
-                            // There is no support for merging partial merge operands, so there's a
-                            // different setter for that.  It, stupidly, requires that the MergeFn
-                            // also be `Clone`
+                            // When partial merge function is `None` we assume that merge operator
+                            // is associative.
+                            // Which means:
+                            //  - full value is undistinguishable from an operand,
+                            //  - single provided merge function is going to be used as merge
+                            // operator and as partial merge operator as well.
+                            //
+                            // Associative merge operator has a different setter. It, stupidly,
+                            // requires that the MergeFn also be `Clone`
                             cf_opts.set_merge_operator_associative(&operator_name, full);
                         }
                     }
