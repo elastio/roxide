@@ -7,6 +7,56 @@ unmaintained = "deny"
 yanked = "deny"
 unsound = "deny"
 ignore = [
+    # Potential segfault in chrono crate, no workarounds
+    # Original error message:
+    #     ### Impact
+    #
+    #     Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
+    #
+    #     ### Workarounds
+    #
+    #     No workarounds are known.
+    #
+    #     ### References
+    #
+    #     - [time-rs/time#293](https://github.com/time-rs/time/issues/293)
+    "RUSTSEC-2020-0159",
+
+    # The same potential segfault in time crate.
+    # Original error message:
+    #      Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
+    #      The affected functions from time 0.2.7 through 0.2.22 are:
+    #
+    #      - `time::UtcOffset::local_offset_at`
+    #      - `time::UtcOffset::try_local_offset_at`
+    #      - `time::UtcOffset::current_local_offset`
+    #      - `time::UtcOffset::try_current_local_offset`
+    #      - `time::OffsetDateTime::now_local`
+    #      - `time::OffsetDateTime::try_now_local`
+    #
+    #      The affected functions in time 0.1 (all versions) are:
+    #
+    #      - `at`
+    #      - `at_utc`
+    #
+    #      Non-Unix targets (including Windows and wasm) are unaffected.
+    #
+    #      ### Patches
+    #
+    #      Pending a proper fix, the internal method that determines the local offset has been modified to always return `None` on the affected operating systems. This has the effect of returning an `Err` on the `try_*` methods and `UTC` on the non-`try_*` methods.
+    #
+    #      Users and library authors with time in their dependency tree should perform `cargo update`, which will pull in the updated, unaffected code.
+    #
+    #      Users of time 0.1 do not have a patch and should upgrade to an unaffected version: time 0.2.23 or greater or the 0.3. series.
+    #
+    #      ### Workarounds
+    #
+    #      No workarounds are known.
+    #
+    #      ### References
+    #
+    #      time-rs/time#293
+    "RUSTSEC-2020-0071",
 ]
 
 # The lint level for crates with security notices. Note that as of
