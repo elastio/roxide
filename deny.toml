@@ -81,9 +81,9 @@ skip = [
     # `config` and `nom` crates use the old version of this crate
     { name = "arrayvec", version = "0.5.2" },
 
-    # clap uses this old version, and cheburashka uses clap
-    { name = "ansi_term", version = "0.11.*" },
     # { name = "crate_name_here", version = "=0.11.0" },
+
+    { name = "itoa", version = "=0.4.8" },
 ]
 # Skips the entire tree of the crate dependencies:
 skip-tree = [
@@ -92,20 +92,7 @@ skip-tree = [
     # Cheburashka 2 again
     { name = "pin-project", version = "0.4.*", depth = 20 },
 ]
-deny = [
-    # color-backtrace is nice but brings in too many dependencies and that are often outdated, so not worth it for us.
-    { name = "color-backtrace" },
-
-    # This constraint was taken from `tonic` deny.toml, but we do use `dirs`
-    # FIXME: remove dirs dependency (btw its repo was suddenly archived for no reason and explanation)
-    # https://www.reddit.com/r/rust/comments/ga7f56/why_dirs_and_directories_repositories_have_been/
-    # dirs crate has a lot of dependencies and there are better alternatives
-    # { name = "dirs" },
-    # { name = "dirs-sys" },
-
-    # deprecated
-    { name = "quickersort" },
-]
+deny = []
 
 [sources]
 unknown-registry = "warn"
@@ -173,6 +160,7 @@ expression = "ISC"
 license-files = [
     { path = "LICENSE", hash = 0x001c7e6c }
 ]
+
 [[licenses.clarify]]
 name = "ring"
 version = "0.16.15"
@@ -183,4 +171,12 @@ version = "0.16.15"
 expression = "ISC AND MIT AND OpenSSL"
 license-files = [
     { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+[[licenses.clarify]]
+name = "encoding_rs"
+version = "0.8.30"
+expression = "MIT OR Apache-2.0"
+license-files = [
+    { path = "COPYRIGHT", hash = 0x39f8ad31 }
 ]
