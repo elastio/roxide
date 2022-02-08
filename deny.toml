@@ -173,10 +173,11 @@ license-files = [
     { path = "LICENSE", hash = 0xbd0eed23 },
 ]
 
+# Copied from https://github.com/hsivonen/encoding_rs/blob/b73366a/README.md#licensing
 [[licenses.clarify]]
 name = "encoding_rs"
-version = "0.8.30"
-expression = "MIT OR Apache-2.0"
+version = "*"
+expression = "(Apache-2.0 OR MIT) AND BSD-3-Clause"
 license-files = [
     { path = "COPYRIGHT", hash = 0x39f8ad31 }
 ]
