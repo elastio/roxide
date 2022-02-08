@@ -21,17 +21,11 @@ env:
   CARGO_REGISTRIES_ELASTIO_PRIVATE_INDEX: ${{ secrets.PRIVATE_REGISTRY_TOKEN_URL }}
   CARGO_REGISTRIES_ELASTIO_PRIVATE_TOKEN: ${{ secrets.CLOUDSMITH_API_TOKEN }}
 
+concurrency:
+  cancel-in-progress: true
+  group: "ci-${{ github.workflow }}-${{ github.ref }}"
+
 jobs:
-  cancel-previous-runs:
-    runs-on: ubuntu-latest
-    if: ${{ github.ref != 'refs/heads/master' }}
-    timeout-minutes: 3
-
-    steps:
-      - uses: styfle/cancel-workflow-action@0.6.0
-        with:
-          access_token: ${{ github.token }}
-
   cargo-deny-check:
     runs-on: ubuntu-latest
     strategy:
@@ -100,9 +94,6 @@ jobs:
 
   rust-code-coverage:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain: [stable]
     env:
       RUSTFLAGS: '-Zinstrument-coverage'
       LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-%p-%m.profraw"
@@ -115,9 +106,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ matrix.toolchain }}
 
-      - run: cargo +${{ matrix.toolchain }} test --workspace --all-targets --all-features
+      - run: cargo test --workspace --all-targets --all-features
 
       - name: Install grcov
         run: |
@@ -180,4 +170,3 @@ jobs:
 
       # Perform the actual release operations
       - run: cargo xelastio publish master
-
