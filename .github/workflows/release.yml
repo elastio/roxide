@@ -35,7 +35,6 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          override: true
           components: rustfmt, clippy
 
       - run: cargo fmt --all -- --check
@@ -82,4 +81,3 @@ jobs:
 
       # Perform the actual release operations
       - run: cargo xelastio publish release ${{ github.event.inputs.bumpLevel }}
-
