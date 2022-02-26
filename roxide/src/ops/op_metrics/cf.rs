@@ -309,7 +309,7 @@ impl<CF: ColumnFamilyLike> ColumnFamilyOperationMetricsReporter<CF> {
             self.op_value_len.observe(value_len as f64);
         }
 
-        let result = self.op_item_duration.observe_closure_duration(|| func());
+        let result = self.op_item_duration.observe_closure_duration(func);
 
         if result.is_err() {
             self.op_item_failed.inc();

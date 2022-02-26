@@ -389,6 +389,7 @@ fn get_property_value(
     }
 }
 
+#[allow(clippy::transmute_num_to_bytes)]
 fn get_property_string_value(
     property: RocksProperty,
     db_ptr: *mut libc::c_void,
@@ -463,6 +464,7 @@ fn get_property_string_value(
     }
 }
 
+#[allow(clippy::transmute_num_to_bytes)]
 fn get_property_int_value(
     property: RocksProperty,
     db_ptr: *mut libc::c_void,
@@ -499,6 +501,7 @@ fn get_property_int_value(
     }
 }
 
+#[allow(clippy::transmute_num_to_bytes)]
 fn get_property_map_value(
     property: RocksProperty,
     db_ptr: *mut libc::c_void,

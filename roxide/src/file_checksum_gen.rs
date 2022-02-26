@@ -29,6 +29,7 @@ impl FileChecksumGenCrc32c {
         Self { raw_generator_ptr }
     }
 
+    #[allow(clippy::transmute_num_to_bytes)]
     pub fn update(&mut self, data: &[u8]) {
         let raw_generator_ptr = self.raw_generator_ptr;
         let len = data.len();

@@ -139,7 +139,7 @@ lazy_static! {
 
             // Translate the rocks naming convention, using "." as the separator, to the prometheus
             // convention which uses "_"
-            let metric_name = ticker_name.replace(".", "_");
+            let metric_name = ticker_name.replace('.', "_");
 
             let gauge = DatabaseLabels::register_int_gauge(metric_name,
                 *description).unwrap();
@@ -292,10 +292,10 @@ lazy_static! {
         for (stat_name, description) in ROCKS_CF_STATS_METRICS.iter() {
             // Translate the rocks naming convention, using "." as the separator, to the prometheus
             // convention which uses "_"
-            let metric_name = format!("rocksdb_{}", stat_name.replace(".", "_"));
+            let metric_name = format!("rocksdb_{}", stat_name.replace('.', "_"));
 
             let gauge = ColumnFamilyLabels::register_float_gauge(metric_name,
-                description.to_owned()).unwrap();
+                description).unwrap();
 
             gauges.insert(stat_name.to_owned(), gauge);
         }
@@ -305,7 +305,7 @@ lazy_static! {
             // Translate the rocks naming convention, using "." as the separator, to the prometheus
             // convention which uses "_".  Also the `-` character is not looked upon very kindly
             let property_name = property.name();
-            let metric_name = property_name.replace(".", "_").replace("-", "_");
+            let metric_name = property_name.replace('.', "_").replace('-', "_");
 
             let gauge = ColumnFamilyLabels::register_float_gauge(metric_name,
                 *description).unwrap();

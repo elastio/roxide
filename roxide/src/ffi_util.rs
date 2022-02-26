@@ -126,6 +126,7 @@ pub(crate) unsafe fn stl_str_vector_to_vec(
 /// objects from such maps.
 ///
 /// Returns a pointer to a std::unordered_map which must be freed with `free_unordered_map`.
+#[allow(clippy::transmute_num_to_bytes)]
 pub(crate) unsafe fn hashmap_to_stl_unordered_map<
     K: AsRef<str> + Into<Vec<u8>>,
     V: AsRef<str> + Into<Vec<u8>>,
@@ -179,6 +180,7 @@ pub(crate) unsafe fn free_unordered_map(map_ptr: *const c_void) {
 ///
 /// It's also the caller's responsibility to ensure this `std::vector` is freed when no longer
 /// used by calling `free_rocks_slices_vector`.
+#[allow(clippy::transmute_num_to_bytes)]
 pub(crate) unsafe fn rust_slices_to_rocks_slices<'a>(
     rust_slices: impl IntoIterator<Item = &'a [u8]>,
 ) -> *mut std::ffi::c_void {

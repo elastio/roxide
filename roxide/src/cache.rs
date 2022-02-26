@@ -93,6 +93,7 @@ impl Cache {
     /// let cache = Cache::from_string("capacity=10M;num_shard_bits=4").unwrap();
     /// assert_eq!(10 * 1024 * 1024, cache.capacity());
     /// ```
+    #[allow(clippy::transmute_num_to_bytes)]
     pub fn from_string(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref();
         let value_ptr = value.as_ptr();

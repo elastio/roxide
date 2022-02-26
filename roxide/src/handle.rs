@@ -45,11 +45,13 @@ pub trait RocksClass {
 /// Marker trait which indicates a particular `RocksClass` FFI type is safe to send between
 /// threads.  If this is implemented, then the corresponding `Handle` and `ArcHandle` types will
 /// also be `Send`
+#[allow(clippy::missing_safety_doc)]
 pub unsafe trait RocksClassSend: RocksClass {}
 
 /// Marker trait which indicates a particular `RocksClass` FFI type is safe to share between
 /// threads.  If this is implemented, then the corresponding `Handle` and `ArcHandle` types will
 /// also be `Sync`
+#[allow(clippy::missing_safety_doc)]
 pub unsafe trait RocksClassSync: RocksClass {}
 
 /// A `Handle` is a type that wraps a pointer to one of the RocksDB FFI structs, like `rocksdb_t*`

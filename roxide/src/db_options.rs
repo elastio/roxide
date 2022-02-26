@@ -667,6 +667,7 @@ impl DbOptions {
     /// a `Options` struct with the database options, and a vector of
     /// `ColumnFamilyDescriptor` struct with the name and options of each column family.  This is
     /// the representation which RocksDB needs to operate on.
+    #[allow(clippy::transmute_num_to_bytes)]
     pub(crate) fn into_components(mut self) -> Result<DbComponents> {
         // Immediately, make sure that there is a specific `Cache` instance for the DB and every
         // CF, removing any explicit `block_cache` options parameter in the process.
@@ -1711,6 +1712,7 @@ impl OptionsExt for Options {
         Ok(())
     }
 
+    #[allow(clippy::transmute_num_to_bytes)]
     fn set_logger(&mut self, min_level: log::Level, logger: Arc<dyn logging::RocksDbLogger>) {
         let logger = logging::CppLoggerWrapper::wrap(logger);
 
@@ -1925,6 +1927,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::transmute_num_to_bytes)]
     fn test_db_options_stats_level(options: DbOptions, level: StatsLevel) -> Result<()> {
         let DbComponents { options, .. } = options.into_components()?;
 
