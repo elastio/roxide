@@ -21,7 +21,6 @@ ignore = [
     #
     #     - [time-rs/time#293](https://github.com/time-rs/time/issues/293)
     "RUSTSEC-2020-0159",
-
     # The same potential segfault in time crate.
     # Original error message:
     #      Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
@@ -77,13 +76,13 @@ multiple-versions = "deny"
 skip = [
     # That's dependence of clap v2.33.3. Need wait for update
     { name = "strsim", version = "=0.8" },
-
     # `config` and `nom` crates use the old version of this crate
     { name = "arrayvec", version = "0.5.2" },
-
     # { name = "crate_name_here", version = "=0.11.0" },
 
     { name = "itoa", version = "=0.4.8" },
+    { name = "parking_lot", version = "=0.11.2" },
+    { name = "parking_lot_core", version = "=0.8.5" },
 ]
 # Skips the entire tree of the crate dependencies:
 skip-tree = [
