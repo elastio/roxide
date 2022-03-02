@@ -137,6 +137,7 @@ pub fn histograms_map() -> &'static HashMap<HistogramId, String> {
 }
 
 /// Gets the values of the tickers from a C++ `Statistics` object and puts them into a Rust vector
+#[allow(clippy::transmute_num_to_bytes)]
 fn get_tickers(map: &mut Vec<TickerData>, stats_ptr: *mut libc::c_void) {
     for (id, name) in tickers_map().iter() {
         let id = *id;
@@ -154,6 +155,7 @@ fn get_tickers(map: &mut Vec<TickerData>, stats_ptr: *mut libc::c_void) {
 
 /// Get the histogram stats from the Rocksdb `Statistics` object into a Rust form.
 #[allow(clippy::cognitive_complexity)] // Ths complexity is not that bad it's just a lot of assignments
+#[allow(clippy::transmute_num_to_bytes)]
 fn get_histograms(map: &mut Vec<HistogramData>, stats_ptr: *mut libc::c_void) {
     for (id, name) in histograms_map().iter() {
         let id = *id;

@@ -24,6 +24,10 @@ pub(crate) unsafe fn from_cstr(ptr: *const c_char) -> String {
     String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
 
+// Suppresses this warning:
+// 'calling `set_len()` immediately after reserving a buffer creates uninitialized values'
+// We use `ptr::copy` to initialize buffer right away after `set_len()`.
+#[allow(clippy::uninit_vec)]
 pub(crate) unsafe fn raw_data(ptr: *const c_char, size: usize) -> Option<Vec<u8>> {
     if ptr.is_null() {
         None

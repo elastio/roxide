@@ -132,7 +132,7 @@ where
     elasyncio::run_blocking_task(move || {
         total.inc();
         running.inc();
-        let result = duration.observe_closure_duration(|| func());
+        let result = duration.observe_closure_duration(func);
         running.dec();
 
         match &result {
@@ -157,7 +157,7 @@ fn instrument_db_op_internal<R, F: FnOnce() -> Result<R>>(
 
         total.inc();
         running.inc();
-        let result = duration.observe_closure_duration(|| func());
+        let result = duration.observe_closure_duration(func);
         running.dec();
 
         match &result {

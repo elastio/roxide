@@ -34,6 +34,7 @@ extern "C" {
 }
 
 /// Generalized implementation of multi-get that works with either DB or transaction pointers
+#[allow(clippy::transmute_num_to_bytes)]
 unsafe fn raw_multi_get_impl<K: BinaryStr>(
     cpp_db_ptr: *mut std::ffi::c_void,
     cpp_tx_ptr: *mut ffi::rocksdb_transaction_t,
@@ -844,7 +845,7 @@ mod test {
         let db = Db::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert!(!db.get(&cf, "foo", None)?.is_some());
+        assert!(db.get(&cf, "foo", None)?.is_none());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
@@ -857,7 +858,7 @@ mod test {
         let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert!(!db.get(&cf, "foo", None)?.is_some());
+        assert!(db.get(&cf, "foo", None)?.is_none());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
@@ -870,7 +871,7 @@ mod test {
         let db = OptimisticTransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
-        assert!(!db.get(&cf, "foo", None)?.is_some());
+        assert!(db.get(&cf, "foo", None)?.is_none());
         db.put(&cf, "foo", "bar", None)?;
         assert_eq!("bar", db.get(&cf, "foo", None)?.unwrap().to_string_lossy());
 
