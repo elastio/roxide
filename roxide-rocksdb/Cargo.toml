@@ -29,7 +29,7 @@ multi-threaded-cf = []
 
 [dependencies]
 libc = "0.2"
-roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys", registry = "elastio-private", version = "^5.0.1-dev"}
+roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys", registry = "elastio-private", version = "^5.0.1-dev" }
 
 [dev-dependencies]
 trybuild = "1.0"
