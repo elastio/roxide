@@ -229,43 +229,6 @@ unsafe extern "C" fn CmpName(arg: *mut c_void) -> *const c_char {
 
 static mut fake_filter_result: c_uchar = 1;
 
-unsafe extern "C" fn FilterDestroy(arg: *mut c_void) {}
-
-unsafe extern "C" fn FilterName(arg: *mut c_void) -> *const c_char {
-    cstrp!("TestFilter")
-}
-
-unsafe extern "C" fn FilterCreate(
-    arg: *mut c_void,
-    key_array: *const *const c_char,
-    key_length_array: *const size_t,
-    num_keys: c_int,
-    filter_length: *mut size_t,
-) -> *mut c_char {
-    *filter_length = 4;
-    let result = malloc(4);
-    memcpy(result, cstrp!("fake") as *const c_void, 4);
-    result as *mut c_char
-}
-
-unsafe extern "C" fn FilterKeyMatch(
-    arg: *mut c_void,
-    key: *const c_char,
-    length: size_t,
-    filter: *const c_char,
-    filter_length: size_t,
-) -> c_uchar {
-    CheckCondition!(filter_length == 4);
-    CheckCondition!(
-        memcmp(
-            filter as *const c_void,
-            cstrp!("fake") as *const c_void,
-            filter_length
-        ) == 0
-    );
-    fake_filter_result
-}
-
 // Custom compaction filter
 
 unsafe extern "C" fn CFilterDestroy(arg: *mut c_void) {}
@@ -794,19 +757,12 @@ fn ffi() {
 
         StartPhase("filter");
         for run in 0..2 {
-            // First run uses custom filter, second run uses bloom filter
+            // First run uses default filter, second run uses bloom filter
             CheckNoError!(err);
             let mut policy: *mut rocksdb_filterpolicy_t = if run == 0 {
-                rocksdb_filterpolicy_create(
-                    ptr::null_mut(),
-                    Some(FilterDestroy),
-                    Some(FilterCreate),
-                    Some(FilterKeyMatch),
-                    None,
-                    Some(FilterName),
-                )
+                ptr::null_mut()
             } else {
-                rocksdb_filterpolicy_create_bloom(10)
+                rocksdb_filterpolicy_create_bloom(10.0)
             };
 
             rocksdb_block_based_options_set_filter_policy(table_options, policy);

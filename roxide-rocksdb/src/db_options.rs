@@ -17,7 +17,7 @@ use std::mem;
 use std::path::Path;
 use std::sync::Arc;
 
-use libc::{self, c_char, c_int, c_uchar, c_uint, c_void, size_t};
+use libc::{self, c_char, c_double, c_int, c_uchar, c_uint, c_void, size_t};
 
 use crate::{
     compaction_filter::{self, CompactionFilterCallback, CompactionFilterFn},
@@ -543,7 +543,7 @@ impl BlockBasedOptions {
     }
 
     /// Sets the filter policy to reduce disk reads
-    pub fn set_bloom_filter(&mut self, bits_per_key: c_int, block_based: bool) {
+    pub fn set_bloom_filter(&mut self, bits_per_key: c_double, block_based: bool) {
         unsafe {
             let bloom = if block_based {
                 ffi::rocksdb_filterpolicy_create_bloom(bits_per_key)
@@ -1431,17 +1431,6 @@ impl Options {
     pub fn set_is_fd_close_on_exec(&mut self, enabled: bool) {
         unsafe {
             ffi::rocksdb_options_set_is_fd_close_on_exec(self.inner, enabled as c_uchar);
-        }
-    }
-
-    /// Enable/disable skipping of log corruption error on recovery (If client is ok with
-    /// losing most recent changes)
-    ///
-    /// Default: false
-    #[deprecated(since = "0.15.0", note = "This option is no longer used")]
-    pub fn set_skip_log_error_on_recovery(&mut self, enabled: bool) {
-        unsafe {
-            ffi::rocksdb_options_set_skip_log_error_on_recovery(self.inner, enabled as c_uchar);
         }
     }
 
@@ -2458,18 +2447,6 @@ impl Options {
         }
     }
 
-    /// Enable/disable purging of duplicate/deleted keys when a memtable is flushed to storage.
-    ///
-    /// Default: true
-    pub fn set_purge_redundant_kvs_while_flush(&mut self, enabled: bool) {
-        unsafe {
-            ffi::rocksdb_options_set_purge_redundant_kvs_while_flush(
-                self.inner,
-                enabled as c_uchar,
-            );
-        }
-    }
-
     /// If true, then DB::Open() will not update the statistics used to optimize
     /// compaction decision by loading table properties from many files.
     /// Turning off this feature will improve DBOpen time especially in disk environment.
@@ -2655,32 +2632,6 @@ impl Options {
         }
     }
 
-    /// Sets the soft rate limit.
-    ///
-    /// Puts are delayed 0-1 ms when any level has a compaction score that exceeds
-    /// soft_rate_limit. This is ignored when == 0.0.
-    /// CONSTRAINT: soft_rate_limit <= hard_rate_limit. If this constraint does not
-    /// hold, RocksDB will set soft_rate_limit = hard_rate_limit
-    ///
-    /// Default: 0.0 (disabled)
-    pub fn set_soft_rate_limit(&mut self, limit: f64) {
-        unsafe {
-            ffi::rocksdb_options_set_soft_rate_limit(self.inner, limit);
-        }
-    }
-
-    /// Sets the hard rate limit.
-    ///
-    /// Puts are delayed 1ms at a time when any level has a compaction score that
-    /// exceeds hard_rate_limit. This is ignored when <= 1.0.
-    ///
-    /// Default: 0.0 (disabled)
-    pub fn set_hard_rate_limit(&mut self, limit: f64) {
-        unsafe {
-            ffi::rocksdb_options_set_hard_rate_limit(self.inner, limit);
-        }
-    }
-
     /// Sets the threshold at which all writes will be slowed down to at least delayed_write_rate if estimated
     /// bytes needed to be compaction exceed this threshold.
     ///
@@ -2698,16 +2649,6 @@ impl Options {
     pub fn set_hard_pending_compaction_bytes_limit(&mut self, limit: usize) {
         unsafe {
             ffi::rocksdb_options_set_hard_pending_compaction_bytes_limit(self.inner, limit);
-        }
-    }
-
-    /// Sets the max time a put will be stalled when hard_rate_limit is enforced.
-    /// If 0, then there is no limit.
-    ///
-    /// Default: 1000
-    pub fn set_rate_limit_delay_max_milliseconds(&mut self, millis: c_uint) {
-        unsafe {
-            ffi::rocksdb_options_set_rate_limit_delay_max_milliseconds(self.inner, millis);
         }
     }
 

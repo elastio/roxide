@@ -236,6 +236,10 @@ fn build_rocksdb() {
         // this was breaking the build on travis due to
         // > 4mb of warnings emitted.
         config.flag("-Wno-unused-parameter");
+
+        // starting with c++17 the use of offsetof the way Rocks uses it triggers
+        // this warning which is distracting
+        config.flag("-Wno-invalid-offsetof");
     }
 
     // Write an include file with the #define's used to build rocks, so that our downstream Rust
@@ -513,7 +517,7 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
 }
 
 fn cxx_standard() -> String {
-    env::var("ROCKSDB_CXX_STD").map_or("-std=c++11".to_owned(), |cxx_std| {
+    env::var("ROCKSDB_CXX_STD").map_or("-std=c++17".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
             format!("-std={}", cxx_std)
         } else {
