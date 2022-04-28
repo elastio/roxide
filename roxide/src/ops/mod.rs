@@ -581,6 +581,11 @@ impl OpenKeyRange<(*mut u8, usize)> {
 
 /// Rust doesn't allow mut pointers to be `Send` for obvious safety reasons, but in this case it's
 /// ok because that pointer represents ownership of the Vec it came from.
+///
+/// The `allow` is intentional here; in the future this explicit impl will mean that there is no
+/// longer any implicit `Send` impl for `OpenKeyRange` regardless of the type parameter.  That's
+/// okay; when that change lands in stable Rust we'll address it if needed.
+#[allow(suspicious_auto_trait_impls)]
 unsafe impl Send for OpenKeyRange<(*mut u8, usize)> {}
 
 impl<K: BinaryStr> fmt::Display for OpenKeyRange<K> {

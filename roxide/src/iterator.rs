@@ -77,6 +77,7 @@ pub trait RocksIterator: Send + 'static {
     ///
     /// This is the default behavior of a new iterator, so this is only needed to convert an
     /// existing iterator that was previously created with another `from_X` call.
+    #[allow(clippy::wrong_self_convention)]
     fn from_start(&mut self);
 
     /// Make this iterator operate from the end of the collection, working backwards

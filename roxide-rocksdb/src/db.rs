@@ -477,7 +477,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
         cfs_v: &[ColumnFamilyDescriptor],
         cfnames: &[*const c_char],
         cfopts: &[*const ffi::rocksdb_options_t],
-        cfhandles: &mut Vec<*mut ffi::rocksdb_column_family_handle_t>,
+        cfhandles: &mut [*mut ffi::rocksdb_column_family_handle_t],
         access_type: &AccessType,
     ) -> Result<*mut ffi::rocksdb_t, Error> {
         let db = unsafe {
@@ -1518,6 +1518,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
             // here to get the default behavior
             let opts: *const ffi::rocksdb_wal_readoptions_t = ptr::null();
             let iter = ffi_try!(ffi::rocksdb_get_updates_since(self.inner, seq_number, opts));
+            assert!(!iter.is_null());
             Ok(DBWALIterator { inner: iter })
         }
     }
