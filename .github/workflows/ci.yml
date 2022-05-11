@@ -46,7 +46,16 @@ jobs:
           command: check ${{ matrix.checks }}
 
   rust-lint:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        # Note: Windows builds don't work currently because `clang` isn't
+        # installed so `bindgen` fails
+        #
+        # We dont' care about RocksDB on Windows anyway so i didn't bother
+        # trying to get it working
+        os: [macos-latest, ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v2
