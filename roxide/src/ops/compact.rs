@@ -5,71 +5,20 @@ use super::op_metrics;
 use super::*;
 use crate::db::{self, db::*, opt_txdb::*, txdb::*};
 use crate::ffi;
-use crate::handle::{self, RocksObject, RocksObjectDefault};
+use crate::handle::{RocksObject, RocksObjectDefault};
 use crate::Result;
-use once_cell::sync::OnceCell;
-use std::ptr;
-
-/// The options specific to a `Compact` operation
-///
-/// TODO: If we need to set any of these options, implement that
-pub struct CompactionOptions {
-    inner: ptr::NonNull<ffi::rocksdb_compactoptions_t>,
-}
-
-impl CompactionOptions {
-    fn new() -> Self {
-        CompactionOptions {
-            inner: unsafe { ptr::NonNull::new(ffi::rocksdb_compactoptions_create()).unwrap() },
-        }
-    }
-}
-
-impl Drop for CompactionOptions {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::rocksdb_compactoptions_destroy(self.inner.as_ptr());
-        }
-    }
-}
-
-impl Default for CompactionOptions {
-    fn default() -> Self {
-        CompactionOptions::new()
-    }
-}
-
-// Technically the struct which RocksDB allocates when a `CompactionOptions` is created is not safe for
-// concurrent thread access, meaning it's `Send` but not `Sync` in Rust terminology.  However, at
-// the Rust level we don't expose any operations on the struct, it's just a placeholder because
-// Rocks doesn't allow us to pass a NULL pointer for options.  This in this implementation it's
-// safe for both `Send` and `Sync`
-unsafe impl Sync for CompactionOptions {}
-unsafe impl Send for CompactionOptions {}
-
-impl handle::RocksObject<ffi::rocksdb_compactoptions_t> for CompactionOptions {
-    fn rocks_ptr(&self) -> ptr::NonNull<ffi::rocksdb_compactoptions_t> {
-        self.inner
-    }
-}
-
-impl handle::RocksObjectDefault<ffi::rocksdb_compactoptions_t> for CompactionOptions {
-    fn default_object() -> &'static Self {
-        static DEFAULT_COMPACTION_OPTIONS: OnceCell<CompactionOptions> = OnceCell::new();
-        DEFAULT_COMPACTION_OPTIONS.get_or_init(CompactionOptions::default)
-    }
-}
+use rocksdb::CompactOptions;
 
 pub trait Compact: RocksOpBase {
     /// Compacts a a range of keys or all keys in a column family
-    fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactionOptions>>>(
+    fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactOptions>>>(
         &self,
         cf: &CF,
         key_range: OpenKeyRange<K>,
         options: O,
     ) -> Result<()>;
 
-    fn compact_all<CF: db::ColumnFamilyLike, O: Into<Option<CompactionOptions>>>(
+    fn compact_all<CF: db::ColumnFamilyLike, O: Into<Option<CompactOptions>>>(
         &self,
         cf: &CF,
         options: O,
@@ -79,7 +28,7 @@ pub trait Compact: RocksOpBase {
 }
 
 impl Compact for Db {
-    fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactionOptions>>>(
+    fn compact_range<CF: db::ColumnFamilyLike, K: BinaryStr, O: Into<Option<CompactOptions>>>(
         &self,
         cf: &CF,
         key_range: OpenKeyRange<K>,
@@ -92,7 +41,7 @@ impl Compact for Db {
                 let (start_key_ptr, start_key_len) = key_range.start().as_ptr_and_len();
                 let (end_key_ptr, end_key_len) = key_range.end().as_ptr_and_len();
 
-                let options = CompactionOptions::from_option(options.into());
+                let options = CompactOptions::from_option(options.into());
 
                 unsafe {
                     ffi::rocksdb_compact_range_cf_opt(
@@ -124,7 +73,7 @@ impl Compact for TransactionDb {
         'a,
         CF: db::ColumnFamilyLike,
         K: BinaryStr,
-        O: Into<Option<CompactionOptions>>,
+        O: Into<Option<CompactOptions>>,
     >(
         &self,
         _cf: &CF,
@@ -140,7 +89,7 @@ impl Compact for OptimisticTransactionDb {
         'a,
         CF: db::ColumnFamilyLike,
         K: BinaryStr,
-        O: Into<Option<CompactionOptions>>,
+        O: Into<Option<CompactOptions>>,
     >(
         &self,
         cf: &CF,
@@ -154,7 +103,7 @@ impl Compact for OptimisticTransactionDb {
                 let (start_key_ptr, start_key_len) = key_range.start().as_ptr_and_len();
                 let (end_key_ptr, end_key_len) = key_range.end().as_ptr_and_len();
 
-                let options = CompactionOptions::from_option(options.into());
+                let options = CompactOptions::from_option(options.into());
 
                 unsafe {
                     Self::with_base_db(self.handle(), |base_db| {
