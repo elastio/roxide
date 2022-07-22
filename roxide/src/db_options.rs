@@ -33,9 +33,9 @@ use std::{ffi::c_void, sync::Arc};
 // Re-export the RocksDB options types for convenience, so callers don't take any direct
 // dependencies on the underlying `rocksdb` crate
 pub use rocksdb::{
-    self, BlockBasedIndexType, BlockBasedOptions, DBCompactionStyle, DBCompressionType, DBPath,
-    DBRecoveryMode, FlushOptions, MemtableFactory, Options, PlainTableFactoryOptions, ReadOptions,
-    WriteOptions,
+    self, BlockBasedIndexType, BlockBasedOptions, CompactOptions, DBCompactionStyle,
+    DBCompressionType, DBPath, DBRecoveryMode, FlushOptions, MemtableFactory, Options,
+    PlainTableFactoryOptions, ReadOptions, WriteOptions,
 };
 
 pub mod prelude {
@@ -45,9 +45,9 @@ pub mod prelude {
     // And also needs the RocksDB option types themselves, which we re-export to make them look
     // like our own
     pub use super::{
-        BlockBasedIndexType, BlockBasedOptions, DBCompactionStyle, DBCompressionType,
-        DBRecoveryMode, FlushOptions, MemtableFactory, Options, PlainTableFactoryOptions,
-        ReadOptions, WriteOptions,
+        BlockBasedIndexType, BlockBasedOptions, CompactOptions, DBCompactionStyle,
+        DBCompressionType, DBRecoveryMode, FlushOptions, MemtableFactory, Options,
+        PlainTableFactoryOptions, ReadOptions, WriteOptions,
     };
 }
 
@@ -93,6 +93,19 @@ impl handle::RocksObjectDefault<ffi::rocksdb_readoptions_t> for ReadOptions {
     fn default_object() -> &'static Self {
         static DEFAULT_READ_OPTIONS: OnceCell<ReadOptions> = OnceCell::new();
         DEFAULT_READ_OPTIONS.get_or_init(ReadOptions::default)
+    }
+}
+
+impl handle::RocksObject<ffi::rocksdb_compactoptions_t> for CompactOptions {
+    fn rocks_ptr(&self) -> ptr::NonNull<ffi::rocksdb_compactoptions_t> {
+        ptr::NonNull::new(self.inner).expect("compaction options")
+    }
+}
+
+impl handle::RocksObjectDefault<ffi::rocksdb_compactoptions_t> for CompactOptions {
+    fn default_object() -> &'static Self {
+        static DEFAULT_COMPACTION_OPTIONS: OnceCell<CompactOptions> = OnceCell::new();
+        DEFAULT_COMPACTION_OPTIONS.get_or_init(CompactOptions::default)
     }
 }
 
