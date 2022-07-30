@@ -78,7 +78,7 @@ pub(crate) unsafe fn path_from_char_ptr(path: *const libc::c_char) -> PathBuf {
     // The RocksDB API on windows nonetheless produces single byte strings, so
     // we need to convert to a String first, and convert that to an OsString
     #[cfg(windows)]
-    let path_os_str: ffi::OsString = String::from_utf8_lossy(path_bytes).to_owned().into();
+    let path_os_str: ffi::OsString = String::from_utf8_lossy(path_bytes).to_string().into();
 
     path_os_str.into()
 }
