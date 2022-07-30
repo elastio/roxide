@@ -520,7 +520,7 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
     false
 }
 
-#[cfg(linux)]
+#[cfg(unix)]
 fn cxx_standard() -> String {
     env::var("ROCKSDB_CXX_STD").map_or("-std=c++17".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
