@@ -240,7 +240,7 @@ impl Merge for WriteBatch {
         value: impl BinaryStr,
         options: impl Into<Option<WriteOptions>>,
     ) -> Result<()> {
-        // a WriteBatch doesn't allow the caller to specify write operations, because `Merge` on a
+        // a WriteBatch doesn't allow the caller to specify write options, because `Merge` on a
         // write batch doesn't actually write anything.  Write options should be provided when
         // applying the write to the database via the `Write` operation.
         if options.into().is_some() {
@@ -295,15 +295,25 @@ impl Merge for unsync::Transaction {
             ));
         }
 
-        unsafe {
-            Self::raw_merge(
-                self.handle(),
-                cf.rocks_ptr(),
-                key.as_slice(),
-                value.as_slice(),
-                WriteOptions::from_option(None).rocks_ptr(),
-            )
-        }
+        op_metrics::instrument_cf_op(
+            cf,
+            op_metrics::ColumnFamilyOperation::Merge,
+            move |reporter| {
+                let options = WriteOptions::from_option(None);
+
+                unsafe {
+                    reporter.processing_item(key.as_slice().len(), value.as_slice().len(), || {
+                        Self::raw_merge(
+                            self.handle(),
+                            cf.rocks_ptr(),
+                            key.as_slice(),
+                            value.as_slice(),
+                            options.rocks_ptr(),
+                        )
+                    })
+                }
+            },
+        )
     }
 }
 

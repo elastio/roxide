@@ -2,7 +2,6 @@ use crate::error::prelude::*;
 use crate::ffi;
 use crate::handle;
 use crate::rocks_class;
-
 use std::ptr;
 
 rocks_class!(WriteBatchHandle, ffi::rocksdb_writebatch_t, ffi::rocksdb_writebatch_destroy, @send);

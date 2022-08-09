@@ -153,6 +153,49 @@ impl Status {
         !self.is_err()
     }
 
+    /// Convert this status into the string form as defined in the RocksDB code base.
+    ///
+    /// This is the form that the status would take if it were reported via the RocksDB C FFI,
+    /// which reports errors as a string.
+    ///
+    /// For rendering this status in a human-readable way, prefer the `Display` impl.
+    pub fn to_rocks_string(&self) -> String {
+        let cpp_status = CppStatus {
+            code: self.code,
+            subcode: self.subcode,
+            severity: self.severity,
+            state: std::ptr::null(),
+        };
+        let cpp_status_ptr: *const CppStatus = &cpp_status;
+        let mut rust_string = String::new();
+        let rust_string_ptr: *mut String = &mut rust_string;
+
+        unsafe {
+            cpp!([cpp_status_ptr as "rocksdb::Status*", rust_string_ptr as "void*"] {
+                auto error_message = cpp_status_ptr->ToString();
+                auto error_message_ptr = error_message.c_str();
+
+                rust!(StatusStlStringToRustString [rust_string_ptr: *mut String as "void*", error_message_ptr: *const i8 as "const char*"] {
+                    unsafe {
+                        // Treat this null-terminated C string pointer as a rust CStr slice
+                        let c_string = ffi::CStr::from_ptr(error_message_ptr);
+
+                        // &[u8] (not including the terminating NULL byte)
+                        let bytes = c_string.to_bytes();
+
+                        // Assume it's a UTF-8 string, replacing invalid UTF 8 chars with a
+                        // placeholder so that this operation is infallible
+                        let rust_str = String::from_utf8_lossy(bytes);
+
+                        (*rust_string_ptr).push_str(&rust_str);
+                    }
+                });
+            });
+        }
+
+        rust_string
+    }
+
     pub(crate) fn new(cpp_status: CppStatus) -> Self {
         let state: Option<Vec<u8>> = if cpp_status.state.is_null() {
             None

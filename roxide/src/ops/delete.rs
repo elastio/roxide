@@ -573,27 +573,28 @@ impl Delete for WriteBatch {
 
         Ok(())
     }
+}
 
-    fn delete(
-        &self,
-        cf: &impl db::ColumnFamilyLike,
-        key: impl BinaryStr,
-        options: impl Into<Option<WriteOptions>>,
+impl DeleteRange for WriteBatch {
+    unsafe fn raw_delete_range(
+        handle: &Self::HandleType,
+        cf: NonNull<ffi::rocksdb_column_family_handle_t>,
+        start: &[u8],
+        end: &[u8],
+        _options: NonNull<ffi::rocksdb_writeoptions_t>,
     ) -> Result<()> {
-        if options.into().is_some() {
-            return Err(Error::other_error(
-                "Write options for `Delete` operations on a `WriteBatch` are not supported",
-            ));
-        }
+        // The deleterange FFI is actually infallible, it doesn't have any way of indicating an
+        // error
+        ffi::rocksdb_writebatch_delete_range_cf(
+            handle.rocks_ptr().as_ptr(),
+            cf.as_ptr(),
+            start.as_ptr() as *const libc::c_char,
+            start.len() as libc::size_t,
+            end.as_ptr() as *const libc::c_char,
+            end.len() as libc::size_t,
+        );
 
-        unsafe {
-            Self::raw_delete(
-                self.handle(),
-                cf.rocks_ptr(),
-                key.as_slice(),
-                WriteOptions::from_option(None).rocks_ptr(),
-            )
-        }
+        Ok(())
     }
 }
 
@@ -606,8 +607,6 @@ impl Delete for WriteBatch {
 /// succeeded while not providing the expected transactional guarantees. There are certain cases
 /// where range deletion can still be used on such DBs; see the API doc on
 /// TransactionDB::DeleteRange() for details.
-///
-/// Note that I can't find that API doc so DeleteRange is basicallynot possible
 impl DeleteRange for Db {
     unsafe fn raw_delete_range(
         handle: &Self::HandleType,
@@ -662,6 +661,178 @@ impl DeleteRange for OptimisticTransactionDb {
             Ok(())
         })
     }
+}
+
+impl DeleteRange for TransactionDb {
+    unsafe fn raw_delete_range(
+        _handle: &Self::HandleType,
+        _cf: NonNull<ffi::rocksdb_column_family_handle_t>,
+        _start: &[u8],
+        _end: &[u8],
+        _options: NonNull<ffi::rocksdb_writeoptions_t>,
+    ) -> Result<()> {
+        // TransactionDb delete range is done differently, so this should never be reached
+        unreachable!();
+    }
+
+    fn delete_range<
+        CF: db::ColumnFamilyLike,
+        K: BinaryStr,
+        KR: Into<KeyRange<K>>,
+        O: Into<Option<WriteOptions>>,
+    >(
+        &self,
+        cf: &CF,
+        key_range: KR,
+        options: O,
+    ) -> Result<()> {
+        // DeleteRange on a transactiondb must be done differently.  A call to the `DeleteRange`
+        // C++ method will fail on TransactionDb, instead there's an elaborate workaround.
+        //
+        // See https://github.com/facebook/rocksdb/blob/1777e5f7e9a891b04ba9130623ebba6344838e26/include/rocksdb/utilities/transaction_db.h#L386-L392
+        // for some background.
+        //
+        // The only way we can perform a range delete on a `TransactionDb` is if we bypass the
+        // transaction protection and perform the range delete in a WriteBatch and then submit that
+        // write batch to the DB with a special option.  That's what we're doing here
+        let batch = WriteBatch::new()?;
+
+        batch.delete_range(cf, key_range, None)?;
+
+        tx_db_apply_write_batch(self, batch, options.into())
+    }
+
+    fn multi_delete_range<
+        CF: db::ColumnFamilyLike,
+        K: BinaryStr,
+        ITEM: Into<KeyRange<K>>,
+        I: IntoIterator<Item = ITEM>,
+        O: Into<Option<WriteOptions>>,
+    >(
+        &self,
+        cf: &CF,
+        ranges: I,
+        options: O,
+    ) -> Result<()> {
+        // See `delete_range` for description of how range deletes work on TransactionDb
+        let batch = WriteBatch::new()?;
+        batch.multi_delete_range(cf, ranges, None)?;
+        tx_db_apply_write_batch(self, batch, options.into())
+    }
+
+    fn async_delete_range<
+        CF: db::ColumnFamilyLike,
+        K: BinaryStr + Send + 'static,
+        ITEM: Into<KeyRange<K>>,
+        I: IntoIterator<Item = ITEM> + Send + 'static,
+        O: Into<Option<WriteOptions>>,
+    >(
+        &self,
+        cf: &CF,
+        ranges: I,
+        options: O,
+    ) -> op_metrics::AsyncOpFuture<()>
+    where
+        <Self as RocksOpBase>::HandleType: Sync + Send,
+    {
+        // See `delete_range` for description of how range deletes work on TransactionDb
+        op_metrics::instrument_async_cf_op(
+            cf,
+            op_metrics::ColumnFamilyOperation::AsyncWrapper,
+            move |reporter| {
+                let me = self.clone();
+                let cf = cf.clone();
+                let options = options.into();
+
+                reporter.run_blocking_task(move |_| {
+                    let batch = WriteBatch::new()?;
+                    batch.multi_delete_range(&cf, ranges, None)?;
+                    tx_db_apply_write_batch(&me, batch, options)
+                })
+            },
+        )
+    }
+
+    fn async_delete_range_scalar<
+        CF: db::ColumnFamilyLike,
+        K: BinaryStr + Send + 'static,
+        RangeT: Into<KeyRange<K>> + Send + 'static,
+    >(
+        &self,
+        cf: &CF,
+        range: RangeT,
+        options: impl Into<Option<WriteOptions>>,
+    ) -> op_metrics::AsyncOpFuture<()>
+    where
+        <Self as RocksOpBase>::HandleType: Sync + Send,
+    {
+        // See `delete_range` for description of how range deletes work on TransactionDb
+        op_metrics::instrument_async_cf_op(
+            cf,
+            op_metrics::ColumnFamilyOperation::AsyncWrapper,
+            move |reporter| {
+                let me = self.clone();
+                let cf = cf.clone();
+                let options = options.into();
+
+                reporter.run_blocking_task(move |_| {
+                    let batch = WriteBatch::new()?;
+                    batch.delete_range(&cf, range, None)?;
+                    tx_db_apply_write_batch(&me, batch, options)
+                })
+            },
+        )
+    }
+}
+
+/// Internal implementation of an operation used by `DeleteRange` but unique to `TransactionDb`.
+/// Don't use this for any other use case.  See [`crate::ops::Write`] for how to apply a
+/// `WriteBatch` in general.
+fn tx_db_apply_write_batch(
+    db: &TransactionDb,
+    write_batch: WriteBatch,
+    options: Option<WriteOptions>,
+) -> Result<()> {
+    // Need to write this write batch to the transaction DB.  Unfortunately the existing Rust
+    // wrapper for the `write()` operation wont' work here.  According to the RocksDB docs,
+    // there's a TransactionDb-specific `Write()` overload that takes a special
+    // `TransactionDBWriteOptimizations` options struct which must have
+    // `skip_concurrency_control` set to true in order to write the DeleteRange to
+    // TransactionDb.
+    //
+    // That's so specific to this particular scenario that we will implement it here inline.
+    op_metrics::instrument_db_op(db, op_metrics::DatabaseOperation::Write, move || {
+        let options = WriteOptions::from_option(options);
+
+        let db_ptr = db.rocks_ptr().as_ptr();
+        let write_batch_ptr = write_batch.rocks_ptr().as_ptr();
+        let options_ptr = options.rocks_ptr().as_ptr();
+
+        unsafe {
+            cpp!([
+                db_ptr as "::rocksdb_transactiondb_t*",
+                write_batch_ptr as "::rocksdb_writebatch_t*",
+                options_ptr as "::rocksdb_writeoptions_t*"
+            ] -> status::CppStatus as "CppStatus" {
+                auto cpp_db_ptr = static_cast<rocksdb::TransactionDB*>(cast_to_db(db_ptr));
+                auto cpp_write_batch_ptr =  cast_to_write_batch(write_batch_ptr);
+                auto cpp_options_ptr = cast_to_write_options(options_ptr);
+
+                auto txdb_write_options = rocksdb::TransactionDBWriteOptimizations();
+
+                // This is the secret incantation: this writes the range delete tombstone to the underlying
+                // database without doing any checks for conflicts in the database.  Needless to say this
+                // can end badly if you are in fact deleting something that is also being operated on in a
+                // transaction.
+                txdb_write_options.skip_concurrency_control = true;
+
+                return rustify_status(cpp_db_ptr->Write(*cpp_options_ptr,
+                    txdb_write_options,
+                    cpp_write_batch_ptr));
+            })
+            .into_result()
+        }
+    })
 }
 
 #[cfg(test)]
@@ -856,6 +1027,15 @@ mod test {
     fn db_multi_range_delete() -> Result<()> {
         let path = TempDbPath::new();
         let db = Db::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+
+        multi_delete_range_test_impl(&db, &cf)
+    }
+
+    #[test]
+    fn transaction_db_multi_range_delete() -> Result<()> {
+        let path = TempDbPath::new();
+        let db = TransactionDb::open(&path, None)?;
         let cf = db.get_cf("default").unwrap();
 
         multi_delete_range_test_impl(&db, &cf)
