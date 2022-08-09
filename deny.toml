@@ -80,17 +80,14 @@ skip = [
     { name = "arrayvec", version = "0.5.2" },
     # { name = "crate_name_here", version = "=0.11.0" },
 
-    { name = "itoa", version = "=0.4.8" },
     { name = "parking_lot", version = "=0.11.2" },
     { name = "parking_lot_core", version = "=0.8.5" },
-
-    # Transitive `backtrace` crate uses older version
-    { name = "miniz_oxide", version = "=0.4.4" },
 
     # Older version comes from `getrandom`
     { name = "wasi", version = "=0.10.2" },
 
-    { name = "time", version = "=0.1.43" },
+		# dashmap duplicate deps are pulled in by cheburashka, grr
+    { name = "dashmap", version = "4.*" },
 ]
 # Skips the entire tree of the crate dependencies:
 skip-tree = [
@@ -106,7 +103,7 @@ unknown-registry = "warn"
 unknown-git = "deny"
 allow-registry = [
     "https://github.com/rust-lang/crates.io-index",
-    "https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git"
+    "https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git",
 ]
 allow-git = [
 ]
@@ -138,6 +135,7 @@ allow = [
     # But that copyleft license doesn't contaminate the rest of the code that
     # just links with the MPL code. So we can add MPL 2 to the approved license list
     "MPL-2.0",
+		"Unicode-DFS-2016"
 ]
 deny = []
 default = "deny"
