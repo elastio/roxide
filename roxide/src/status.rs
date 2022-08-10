@@ -175,7 +175,7 @@ impl Status {
                 auto error_message = cpp_status_ptr->ToString();
                 auto error_message_ptr = error_message.c_str();
 
-                rust!(StatusStlStringToRustString [rust_string_ptr: *mut String as "void*", error_message_ptr: *const i8 as "const char*"] {
+                rust!(StatusStlStringToRustString [rust_string_ptr: *mut String as "void*", error_message_ptr: *const libc::c_char as "const char*"] {
                     unsafe {
                         // Treat this null-terminated C string pointer as a rust CStr slice
                         let c_string = ffi::CStr::from_ptr(error_message_ptr);
