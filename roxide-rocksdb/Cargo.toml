@@ -1,7 +1,7 @@
 [package]
 name = "roxide-rocksdb"
 description = "Elastio's fork of `rocksdb` crate which `roxide` wraps and makes more Rust-y"
-version = "5.1.3-dev"
+version = "5.2.0"
 edition = "2021"
 authors = ["Tyler Neely <t@jujit.su>", "David Greenberg <dsg123456789@gmail.com>", "Adam Nelson <adam@elastio.com>"]
 repository = "https://github.com/elastio/roxide"
@@ -29,9 +29,4 @@ multi-threaded-cf = []
 
 [dependencies]
 libc = "0.2"
-roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys" }
-
-[dev-dependencies]
-trybuild = "1.0"
-tempfile = "3.1"
-pretty_assertions = "0.7"
+roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys" , version = "^5.2.0", registry = "elastio-private" }
