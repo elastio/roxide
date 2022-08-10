@@ -104,7 +104,7 @@ jobs:
   rust-code-coverage:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '-Zinstrument-coverage'
+      RUSTFLAGS: '-C instrument-coverage'
       LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-%p-%m.profraw"
       RUSTC_BOOTSTRAP: 1
 

@@ -2,6 +2,7 @@
 //! commit transaction semantics `Begin/Commit/Rollback`
 use super::*;
 use crate::rocks_class;
+use cheburashka::logging::prelude::*;
 use once_cell::sync::OnceCell;
 use std::ptr;
 
@@ -15,18 +16,42 @@ pub struct TransactionOptions {
 }
 
 impl TransactionOptions {
+    #[cfg_attr(
+        not(feature = "deadlock_detection"),
+        allow(unused_mut, clippy::let_and_return,)
+    )]
     fn new() -> Self {
         let options = unsafe { ffi::rocksdb_transaction_options_create() };
 
-        TransactionOptions {
+        let mut me = TransactionOptions {
             inner: ptr::NonNull::new(options).unwrap(),
-        }
+        };
+
+        // The RocksDB default options do not enable deadlock detection, for now we're keeping it
+        // that way.  Without deadlock detection, pessimistic locking transactions that do in fact
+        // deadlock with another transaction will fail when their locks timeout.  The default lock
+        // timeout is one second, so that's probably not unreasonable default behavior, however if
+        // the lock timeout is increased this could be an undesireable behavior.
+        //
+        // If the `deadlock_detection` feature is enabled, the default is changed so that deadlock
+        // detection is enabled by default.
+        #[cfg(feature = "deadlock_detection")]
+        me.deadlock_detect(true);
+
+        me
     }
 
     /// Enable or disable deadlock detections for this specific transaction.
     ///
-    /// The RocksDB default is to disable deadlock detection, but in Roxide the default is to
+    /// The RocksDB default is to disable deadlock detection, but callers may want to
     /// enable it because it's very helpful for identifying conflicts between transactions.
+    ///
+    /// By enabling the `deadlock_detection` feature on this crate, deadlock detection will be
+    /// enabled by default.  Otherwise it defaults to disabled.
+    ///
+    /// If deadlock detection is *not* enabled, and two transactions deadlock, they will both block
+    /// until the lock timeout elapses, and it won't be obvious from the resulting error if this
+    /// was due to contention on the lock or a deadlock.
     ///
     /// Note that there is definitely some runtime performance cost for enabling this, but in our
     /// testing it's not been a noticeably overhead.
@@ -51,11 +76,6 @@ impl Drop for TransactionOptions {
 
 impl Default for TransactionOptions {
     fn default() -> Self {
-        // The RocksDB default options do not enable deadlock detection, for now we're keeping it
-        // that way.  Without deadlock detection, pessimistic locking transactions that do in fact
-        // deadlock with another transaction will fail when their locks timeout.  The default lock
-        // timeout is one second, so that's probably not unreasonable default behavior, however if
-        // the lock timeout is increased this could be an undesireable behavior.
         TransactionOptions::new()
     }
 }
@@ -215,7 +235,34 @@ impl crate::error::ErrorPostprocessor for TransactionDb {
                 // detection is not enabled
                 Error::RocksDbLockTimeout { backtrace }
             }
-            other => other,
+            Error::RocksDbDeadlock {
+                deadlock_paths,
+                backtrace,
+            } => {
+                // If a deadlock causes the failure of a C FFI call instead of one of the
+                // operations we implement using the C++ API, then the error is reported as a
+                // message, and `make_result` in `ffi_util` will detect when that string matches
+                // the error message for a deadlock, and report this error.  But in that case, it
+                // can't obtain the deadlock paths because it doesn't have access to the database
+                // handle.  So if there are no deadlock paths, re-create this same error but with
+                // the current deadlocks
+                Error::RocksDbDeadlock {
+                    deadlock_paths: if deadlock_paths.is_empty() {
+                        self.get_deadlocks()
+                    } else {
+                        deadlock_paths
+                    },
+                    backtrace,
+                }
+            }
+            other => {
+                // This isn't an error we care about
+                trace!(
+                    err = log_error(&other),
+                    "Error postprocessor ignoring this error"
+                );
+                other
+            }
         }
     }
 }
@@ -249,5 +296,40 @@ impl TransactionDb {
         }
 
         deadlocks
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[cfg(feature = "deadlock_detection")]
+    #[test]
+    fn deadlock_detection_enabled_by_default() {
+        deadlock_detection_test_impl(true);
+    }
+
+    #[cfg(not(feature = "deadlock_detection"))]
+    #[test]
+    fn deadlock_detection_disabled_by_default() {
+        deadlock_detection_test_impl(false);
+    }
+
+    fn deadlock_detection_test_impl(should_be_enabled: bool) {
+        let options = TransactionOptions::default();
+
+        let options_ptr = options.inner.as_ptr();
+
+        let enabled = unsafe {
+            cpp!([options_ptr as "rocksdb::TransactionOptions*"] -> bool as "bool" {
+                return options_ptr->deadlock_detect;
+            })
+        };
+
+        if should_be_enabled {
+            assert!(enabled, "Deadlock detection should be enabled by default");
+        } else {
+            assert!(!enabled, "Deadlock detection should be disabled by default");
+        }
     }
 }

@@ -24,6 +24,14 @@ lz4 = ["roxide-librocksdb-sys/lz4", "rocksdb/lz4"]
 # Enable zstd compression in RocksDB
 zstd = ["roxide-librocksdb-sys/zstd", "rocksdb/zstd"]
 
+# By default, enable deadlock detection when using the pessimistic locking TransactionDb type
+# This can always be enabled or disabled at runtime on a single `TransactionOptions` instance,
+# but by enabling this feature the default setting is to enable this if `None` is passed for
+# `TransactionOptions` when beginning a new transaction on TransactionDb.
+#
+# This has no effect if using `Db` or `OptimisticTransactionDb` types.
+deadlock_detection = []
+
 # Enable jemalloc support in RocksDB
 # NOTE: The Rust code will use whatever the Rust allocator is in the current process
 # Enabling this feature won't automatically make the Rust code use jemalloc.  For that you
@@ -49,7 +57,7 @@ log = "0.4" # Needed only for the log level enum
 maplit = "1.0"
 num_enum = "0.5.1"
 num-traits = "0.2"
-once_cell = "1.7"
+once_cell = "1.13"
 parking_lot = "0.11"
 pin-project = "1.0"
 rand = { version = "0.8", features = ["small_rng"] }

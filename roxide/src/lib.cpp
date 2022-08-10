@@ -21,6 +21,8 @@ namespace rocksdb_hack {
           rocksdb::OptimisticTransactionDB* rep;
         };
 
+        struct rocksdb_writebatch_t      { rocksdb::WriteBatch        rep; };
+
         struct rocksdb_column_family_handle_t  { rocksdb::ColumnFamilyHandle* rep; };
 
         struct rocksdb_transaction_t {
@@ -39,6 +41,9 @@ namespace rocksdb_hack {
         };
         struct rocksdb_writeoptions_t    { rocksdb::WriteOptions      rep; };
         struct rocksdb_options_t         { rocksdb::Options           rep; };
+        struct rocksdb_compactoptions_t {
+            rocksdb::CompactRangeOptions rep;
+        };
         struct rocksdb_flushoptions_t    { rocksdb::FlushOptions      rep; };
         struct rocksdb_cache_t {
           std::shared_ptr<rocksdb::Cache> rep;
@@ -59,6 +64,10 @@ static rocksdb::DB* cast_to_db_internal(struct rocksdb_hack::rocksdb_transaction
 
 static rocksdb::DB* cast_to_db_internal(struct rocksdb_hack::rocksdb_optimistictransactiondb_t* db) {
     return db->rep;
+}
+
+static rocksdb::WriteBatch* cast_to_write_batch_internal(struct rocksdb_hack::rocksdb_writebatch_t* write_batch) {
+    return &write_batch->rep;
 }
 
 static rocksdb::ColumnFamilyHandle* cast_to_cf_internal(struct rocksdb_hack::rocksdb_column_family_handle_t* cf) {
@@ -85,6 +94,10 @@ static rocksdb::WriteOptions* cast_to_write_options_internal(struct rocksdb_hack
     return &options->rep;
 }
 
+static rocksdb::CompactRangeOptions* cast_to_compact_options_internal(struct rocksdb_hack::rocksdb_compactoptions_t* options) {
+    return &options->rep;
+}
+
 static rocksdb::FlushOptions* cast_to_flush_options_internal(struct rocksdb_hack::rocksdb_flushoptions_t* options) {
     return &options->rep;
 }
@@ -99,6 +112,10 @@ rocksdb::DB* cast_to_db(::rocksdb_transactiondb_t* db) {
 
 rocksdb::DB* cast_to_db(::rocksdb_optimistictransactiondb_t* db) {
     return cast_to_db_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_optimistictransactiondb_t*>(db));
+}
+
+rocksdb::WriteBatch* cast_to_write_batch(::rocksdb_writebatch_t* write_batch) {
+    return cast_to_write_batch_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_writebatch_t*>(write_batch));
 }
 
 rocksdb::ColumnFamilyHandle* cast_to_cf(::rocksdb_column_family_handle_t* cf) {
@@ -125,6 +142,10 @@ rocksdb::ReadOptions* cast_to_read_options(::rocksdb_readoptions_t* options) {
 
 rocksdb::WriteOptions* cast_to_write_options(::rocksdb_writeoptions_t* options) {
     return cast_to_write_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_writeoptions_t*>(options));
+}
+
+rocksdb::CompactRangeOptions* cast_to_compact_options(::rocksdb_compactoptions_t* options) {
+    return cast_to_compact_options_internal(reinterpret_cast<struct rocksdb_hack::rocksdb_compactoptions_t*>(options));
 }
 
 rocksdb::FlushOptions* cast_to_flush_options(::rocksdb_flushoptions_t* options) {

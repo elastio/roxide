@@ -15,6 +15,7 @@
 
 use crate::error::{self, prelude::*};
 use libc::{self, c_char, c_void};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::ffi;
 use std::ffi::CStr;
@@ -28,6 +29,49 @@ cpp! {{
     #include "src/ffi_util.h"
     #include "src/ffi_util.cpp"
 }}
+
+/// The expected RocksDB error message text when certain common errors occur that we want to be
+/// able to detect programmatically.
+///
+/// Unfortunately the C FFI for RocksDB reports errors as a string, but we need to translate
+/// certain Rocks errors into certain specific error codes.  Until the C FFI improves, or until we
+/// rewrite those calls to use the more complex C++ API, we're stuck with this hack.
+///
+/// This is especially important when using [`crate::TransactionDb`] in retriable transactions.
+/// Unlike optimistic transactions, in which errors are always returned by the `commit` operation
+/// and thus are never stringly typed, in pessimistic transactions any operation, like `put` or
+/// `delete`, can fail due to deadlock of conflict.  Our retriable transaction mechanism relies on
+/// the ability to detect that category of error explicitly.
+struct RocksErrorMessages {
+    lock_timeout: String,
+
+    deadlock: String,
+}
+
+impl RocksErrorMessages {
+    fn new() -> Self {
+        use crate::status::{Code, Severity, Status, SubCode};
+
+        Self {
+            lock_timeout: Status {
+                code: Code::TimedOut,
+                subcode: SubCode::LockTimeout,
+                severity: Severity::NoError,
+                state: None,
+            }
+            .to_rocks_string(),
+            deadlock: Status {
+                code: Code::Busy,
+                subcode: SubCode::Deadlock,
+                severity: Severity::NoError,
+                state: None,
+            }
+            .to_rocks_string(),
+        }
+    }
+}
+
+static ROCKS_ERROR_MESSAGES: Lazy<RocksErrorMessages> = Lazy::new(RocksErrorMessages::new);
 
 pub(crate) fn error_message(ptr: *const c_char) -> String {
     let cstr = unsafe { CStr::from_ptr(ptr as *const _) };
@@ -44,11 +88,24 @@ pub(crate) fn error_message(ptr: *const c_char) -> String {
 /// proper `Error` object and freeing the heap allocated string.
 pub(crate) fn make_result<T>(ok: T, err: *const c_char) -> Result<T> {
     if !err.is_null() {
-        error::DatabaseError {
-            message: error_message(err),
+        let message = error_message(err);
+
+        if message == ROCKS_ERROR_MESSAGES.lock_timeout {
+            error::RocksDbLockTimeout {}.fail().map_err(Error::report)
+        } else if message == ROCKS_ERROR_MESSAGES.deadlock {
+            // Unfortunately when the error is reported via C FFI, we can't recover the deadlock
+            // paths.  The `ErrorPostprocessor` impl on `TransactionDb` will see this and make
+            // another attempt to get the deadlocks before propagating the error up the stack
+            error::RocksDbDeadlock {
+                deadlock_paths: vec![],
+            }
+            .fail()
+            .map_err(Error::report)
+        } else {
+            error::DatabaseError { message }
+                .fail()
+                .map_err(Error::report)
         }
-        .fail()
-        .map_err(Error::report)
     } else {
         Ok(ok)
     }
