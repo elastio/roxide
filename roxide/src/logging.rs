@@ -452,12 +452,21 @@ impl RocksDbLogger for CheburashkaLogger {
                         .and_then(|e| e.as_str())
                         .unwrap_or("('event' field missing)");
 
-                    cheburashka::logging::dyn_event!(target: "rocksdb_log_json_event",
-                        level, event, json = %json_event.dump(), "RocksDB {}", event);
+                    let json_event = serde_json::to_string(&json_event)
+                        .expect("JSON value serialization must be always infallible");
+
+                    cheburashka::logging::dyn_event!(
+                        target: "rocksdb_log_json_event",
+                        level,
+                        event,
+                        json = json_event.as_str(),
+                        "RocksDB {}",
+                        event
+                    );
                 }
                 json_event => {
                     cheburashka::logging::error!(target: "rocksdb_log_json_event",
-                        json = %json_event.dump(),
+                        json = %json_event,
                         "RocksDB event is not a JSON object");
                 }
             },
@@ -555,7 +564,9 @@ pub(crate) mod tests {
             TestLogger {
                 include_json: false,
                 messages: Arc::new(Mutex::new(Vec::<String>::new())),
-                json_events: Arc::new(Mutex::new(Vec::<serde_json::Result<serde_json::Value>>::new())),
+                json_events: Arc::new(Mutex::new(
+                    Vec::<serde_json::Result<serde_json::Value>>::new(),
+                )),
                 context: Arc::new(Mutex::new(HashMap::new())),
             }
         }
@@ -669,7 +680,7 @@ pub(crate) mod tests {
             match json_event {
                 Err(e) => panic!("Failed to parse JSON event: {}", e),
                 Ok(json_event) => {
-                    dbg!(json_event.dump());
+                    dbg!(json_event.to_string());
                     match json_event {
                         serde_json::Value::Object(json_event) => {
                             // All events have a time stamp and an event type
