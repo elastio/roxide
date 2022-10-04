@@ -343,7 +343,7 @@ pub trait RocksDbLogger: Send + Sync + Any {
             if self.include_json_events() {
                 // Parse this message as JSON and pass it to the JSON event log handling method
                 let (_, json_msg) = msg.split_at(prefix_index + JSON_EVENT_PREFIX.len());
-                self.log_json_event(level, json::parse(json_msg));
+                self.log_json_event(level, serde_json::from_str(json_msg));
             }
         } else {
             self.log_str(level, &msg);
@@ -362,7 +362,7 @@ pub trait RocksDbLogger: Send + Sync + Any {
     ///
     /// If an implementation of this trait is interested in these log messages, override
     /// `include_json_events` to return `true`.
-    fn log_json_event(&self, level: log::Level, msg: json::Result<json::JsonValue>) {
+    fn log_json_event(&self, level: log::Level, msg: serde_json::Result<serde_json::Value>) {
         let _ = level;
         let _ = msg;
         unimplemented!()
@@ -434,7 +434,7 @@ impl RocksDbLogger for CheburashkaLogger {
 
     // The cognitive complexity doesn't impact readability in this case, IMHO
     #[allow(clippy::cognitive_complexity)]
-    fn log_json_event(&self, level: log::Level, msg: json::Result<json::JsonValue>) {
+    fn log_json_event(&self, level: log::Level, msg: serde_json::Result<serde_json::Value>) {
         // Enter the logging span, then log the message to the logging system.
         let span = self.span.read();
         let _e = span.enter();
@@ -446,18 +446,27 @@ impl RocksDbLogger for CheburashkaLogger {
         //
         match msg {
             Ok(json_event) => match json_event {
-                json::JsonValue::Object(json_event) => {
+                serde_json::Value::Object(json_event) => {
                     let event = json_event
                         .get("event")
                         .and_then(|e| e.as_str())
                         .unwrap_or("('event' field missing)");
 
-                    cheburashka::logging::dyn_event!(target: "rocksdb_log_json_event",
-                        level, event, json = %json_event.dump(), "RocksDB {}", event);
+                    let json_event = serde_json::to_string(&json_event)
+                        .expect("JSON value serialization must be always infallible");
+
+                    cheburashka::logging::dyn_event!(
+                        target: "rocksdb_log_json_event",
+                        level,
+                        event,
+                        json = json_event.as_str(),
+                        "RocksDB {}",
+                        event
+                    );
                 }
                 json_event => {
                     cheburashka::logging::error!(target: "rocksdb_log_json_event",
-                        json = %json_event.dump(),
+                        json = %json_event,
                         "RocksDB event is not a JSON object");
                 }
             },
@@ -546,7 +555,7 @@ pub(crate) mod tests {
     pub(crate) struct TestLogger {
         pub include_json: bool,
         pub messages: Arc<Mutex<Vec<String>>>,
-        pub json_events: Arc<Mutex<Vec<json::Result<json::JsonValue>>>>,
+        pub json_events: Arc<Mutex<Vec<serde_json::Result<serde_json::Value>>>>,
         pub context: Arc<Mutex<HashMap<String, String>>>,
     }
 
@@ -555,7 +564,9 @@ pub(crate) mod tests {
             TestLogger {
                 include_json: false,
                 messages: Arc::new(Mutex::new(Vec::<String>::new())),
-                json_events: Arc::new(Mutex::new(Vec::<json::Result<json::JsonValue>>::new())),
+                json_events: Arc::new(Mutex::new(
+                    Vec::<serde_json::Result<serde_json::Value>>::new(),
+                )),
                 context: Arc::new(Mutex::new(HashMap::new())),
             }
         }
@@ -574,7 +585,7 @@ pub(crate) mod tests {
             self.messages.lock().unwrap().push(msg.to_owned());
         }
 
-        fn log_json_event(&self, _level: log::Level, msg: json::Result<json::JsonValue>) {
+        fn log_json_event(&self, _level: log::Level, msg: serde_json::Result<serde_json::Value>) {
             self.json_events.lock().unwrap().push(msg);
         }
 
@@ -669,9 +680,9 @@ pub(crate) mod tests {
             match json_event {
                 Err(e) => panic!("Failed to parse JSON event: {}", e),
                 Ok(json_event) => {
-                    dbg!(json_event.dump());
+                    dbg!(json_event.to_string());
                     match json_event {
-                        json::JsonValue::Object(json_event) => {
+                        serde_json::Value::Object(json_event) => {
                             // All events have a time stamp and an event type
                             assert_ne!(None, json_event.get("time_micros"));
                             assert_ne!(None, json_event.get("event"));
