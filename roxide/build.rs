@@ -10,7 +10,10 @@ fn main() {
     let mut config = cpp_build::Config::new();
 
     // Rocks starting from 7.0 requires C++ 17
+    #[cfg(unix)]
     config.flag("-std=c++17");
+    #[cfg(windows)]
+    config.flag("-std:c++17");
 
     for include_path in include_paths {
         config.include(&include_path);

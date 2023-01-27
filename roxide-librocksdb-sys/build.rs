@@ -229,10 +229,11 @@ fn build_rocksdb() {
         lib_sources.push("port/win/win_thread.cc");
     }
 
+    config.flag(&cxx_standard());
+
     if target.contains("msvc") {
         config.flag("-EHsc");
     } else {
-        config.flag(&cxx_standard());
         // this was breaking the build on travis due to
         // > 4mb of warnings emitted.
         config.flag("-Wno-unused-parameter");
@@ -445,6 +446,9 @@ fn build_zstd() {
     // Hide symbols from resulting library,
     // so we can be used with another zstd-linking lib.
     // See https://github.com/gyscos/zstd-rs/issues/58
+    // MSVC's cl.exe doesn't recognize this param and there doesn't seem to be an
+    // alternative.
+    #[cfg(not(windows))]
     compiler.flag("-fvisibility=hidden");
     compiler.define("ZSTDLIB_VISIBILITY", Some(""));
     compiler.define("ZDICTLIB_VISIBILITY", Some(""));
@@ -516,10 +520,22 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
     false
 }
 
+#[cfg(unix)]
 fn cxx_standard() -> String {
     env::var("ROCKSDB_CXX_STD").map_or("-std=c++17".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
             format!("-std={}", cxx_std)
+        } else {
+            cxx_std
+        }
+    })
+}
+
+#[cfg(windows)]
+fn cxx_standard() -> String {
+    env::var("ROCKSDB_CXX_STD").map_or("-std:c++17".to_owned(), |cxx_std| {
+        if !cxx_std.starts_with("-std:") {
+            format!("-std:{}", cxx_std)
         } else {
             cxx_std
         }
