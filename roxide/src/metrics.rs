@@ -54,12 +54,10 @@ lazy_static! {
         ("rocksdb.block.cache.data.miss", "Misses on data blocks in RocksDB block cache"),
         ("rocksdb.block.cache.filter.add", "Filter blocks added to the RocksDB block cache"),
         ("rocksdb.block.cache.filter.bytes.insert", "Filter bytes added to the RocksDB block cache"),
-        ("rocksdb.block.cache.filter.bytes.evict", "Bytes evicted from the RocksDB block cache as a result of adding filter blocks"),
         ("rocksdb.block.cache.filter.hit", "Hits on filter blocks in RocksDB block cache"),
         ("rocksdb.block.cache.filter.miss", "Misses on filter blocks in RocksDB block cache"),
         ("rocksdb.block.cache.index.add", "Index blocks added to the RocksDB block cache"),
         ("rocksdb.block.cache.index.bytes.insert", "Index bytes added to the RocksDB block cache"),
-        ("rocksdb.block.cache.index.bytes.evict", "Bytes evicted from the RocksDB block cache as a result of adding index blocks"),
         ("rocksdb.block.cache.index.hit", "Hits on index blocks in RocksDB block cache"),
         ("rocksdb.block.cache.index.miss", "Misses on index blocks in RocksDB block cache"),
 

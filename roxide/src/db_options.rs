@@ -1442,7 +1442,15 @@ impl BlockBasedOptionsExt for BlockBasedOptions {
                     let new_options_ptr = new_options.inner;
 
                     cpp!([options_ptr as "const rocksdb::BlockBasedTableOptions*", new_options_ptr as "rocksdb::BlockBasedTableOptions*", map_ptr as "const OptionsMap*"] -> *mut ::libc::c_char as "const char*" {
+                        // TODO: the addition of a ConfigOptions argument to this function was
+                        // added when we upgraded to Rocks 8.0 (though it might have landed in
+                        // Rocks before that).  Previous that argument wasn't passed.  THe way the
+                        // surrounding Rust code is written, there is no ConfigOptions instance
+                        // available.  So we use the default value here.  Hopefully that's correct
+                        auto config_options = rocksdb::ConfigOptions();
+
                         auto status = rocksdb::GetBlockBasedTableOptionsFromMap(
+                            config_options,
                             *options_ptr,
                             *map_ptr,
                             new_options_ptr
@@ -1598,7 +1606,14 @@ impl OptionsExt for Options {
                     const rocksdb::ColumnFamilyOptions& existing_cf_options = *static_cast<const rocksdb::ColumnFamilyOptions*>(options_class_ptr);
                     auto new_db_options = rocksdb::DBOptions();
 
+                    // TODO: the addition of a ConfigOptions argument to this function was
+                    // added when we upgraded to Rocks 8.0 (though it might have landed in
+                    // Rocks before that).  Previous that argument wasn't passed.  THe way the
+                    // surrounding Rust code is written, there is no ConfigOptions instance
+                    // available.  So we use the default value here.  Hopefully that's correct
+                    auto config_options = rocksdb::ConfigOptions();
                     auto status = rocksdb::GetDBOptionsFromMap(
+                        config_options,
                         *options_class_ptr,
                         *map_ptr,
                         &new_db_options
@@ -1680,7 +1695,14 @@ impl OptionsExt for Options {
                     const rocksdb::DBOptions& existing_db_options = *static_cast<const rocksdb::DBOptions*>(options_class_ptr);
                     auto new_cf_options = rocksdb::ColumnFamilyOptions();
 
+                    // TODO: the addition of a ConfigOptions argument to this function was
+                    // added when we upgraded to Rocks 8.0 (though it might have landed in
+                    // Rocks before that).  Previous that argument wasn't passed.  THe way the
+                    // surrounding Rust code is written, there is no ConfigOptions instance
+                    // available.  So we use the default value here.  Hopefully that's correct
+                    auto config_options = rocksdb::ConfigOptions();
                     auto status = rocksdb::GetColumnFamilyOptionsFromMap(
+                        config_options,
                         *options_class_ptr,
                         *map_ptr,
                         &new_cf_options

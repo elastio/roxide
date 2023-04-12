@@ -34,4 +34,4 @@ roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys" }
 [dev-dependencies]
 trybuild = "1.0"
 tempfile = "3.1"
-pretty_assertions = "0.7"
+pretty_assertions = "1"

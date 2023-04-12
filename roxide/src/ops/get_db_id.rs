@@ -142,6 +142,6 @@ mod test {
 
         let uuid = uuid::Uuid::parse_str(&id).unwrap();
 
-        assert_eq!(uuid.to_hyphenated().to_string(), id);
+        assert_eq!(uuid.hyphenated().to_string(), id);
     }
 }
