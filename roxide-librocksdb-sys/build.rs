@@ -376,6 +376,9 @@ fn build_snappy() {
     config.define("NDEBUG", Some("1"));
     config.extra_warnings(false);
 
+    // Snappy doesn't compile cleanly without this warning being suppressed.  Nice work guys.
+    config.flag_if_supported("-Wno-sign-compare");
+
     if target.contains("msvc") {
         config.flag("-EHsc");
     } else {
