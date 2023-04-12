@@ -426,6 +426,7 @@ fn build_zstd() {
         "zstd/lib/common/*.c",
         "zstd/lib/compress/*.c",
         "zstd/lib/decompress/*.c",
+        "zstd/lib/decompress/*.S",
         "zstd/lib/dictBuilder/*.c",
         "zstd/lib/legacy/*.c",
     ];
