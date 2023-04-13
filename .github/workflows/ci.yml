@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           components: rustfmt, clippy
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
 
@@ -100,7 +100,7 @@ jobs:
       - run: sudo apt-get install -y libboost-all-dev libgflags-dev g++ openssl libssl-dev liburing-dev
       - uses: actions/checkout@v3
         with:
-          repository: https://github.com/facebook/folly
+          repository: facebook/folly
           submodules: recursive
           ref: v2023.04.10.00  # folly doesn't have a release schedule, this was the latest at the time of this writing
           path: folly-is-shit
@@ -108,7 +108,7 @@ jobs:
       - run: |
           cd folly-is-shit
           sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive
-          python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build --no-tests --install-prefix $PWD/..
+          python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build --no-tests  --install-dir /usr
 
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
 
