@@ -192,6 +192,23 @@ fn build_rocksdb() {
             println!("cargo:rustc-link-lib=uring");
         }
 
+        if cfg!(feature = "folly")
+        {
+            // If the use of the facebook open source library "folly" is enabled, then we can use
+            // coroutines for async support.
+            add_define(&mut config, &mut defines, "USE_COROUTINES", None);
+            config.flag_if_supported("-fcoroutines");
+
+            // Enabbling coroutines implies that the facebook library `folly` will be used, and must be
+            // linked.  `folly` in turn requires other deps including boost.
+            //
+            // Sadly all of deps are such insanely complex C++ projects there's no way to vendor
+            // them, they must be installed as shared libraries
+            println!("cargo:rustc-link-lib=folly");
+            println!("cargo:rustc-link-lib=boost_context");
+            println!("cargo:rustc-link-lib=glog");
+        }
+
         // The following are detected dynamically in the CMakeLists.txt file in the official
         // RocksDB build.  We dont' have access to cmake so we just assume these are present
         // because we've made them a required part of our build environment on Linux.
@@ -564,7 +581,7 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
 }
 
 fn cxx_standard() -> String {
-    env::var("ROCKSDB_CXX_STD").map_or("-std=c++17".to_owned(), |cxx_std| {
+    env::var("ROCKSDB_CXX_STD").map_or("-std=c++20".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
             format!("-std={}", cxx_std)
         } else {

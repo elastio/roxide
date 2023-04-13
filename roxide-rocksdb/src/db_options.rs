@@ -2988,17 +2988,36 @@ impl ReadOptions {
             ffi::rocksdb_readoptions_set_pin_data(self.inner, v as c_uchar);
         }
     }
+
+    /// If true, and this was compiled with proper io_uring support, enable async I/O for this
+    /// read.
+    ///
+    /// When the io_uring feature is enabled, this is enabled by default, so this setting needs to
+    /// be called only when overriding the default and explicitly disabling async I/O.
+    #[cfg(feature = "io_uring")]
+    pub fn set_async_io(&mut self, v: bool) {
+        unsafe {
+            ffi::rocksdb_readoptions_set_async_io(self.inner, v as c_uchar);
+        }
+    }
 }
 
 impl Default for ReadOptions {
+    #[cfg_attr(not(feature = "io_uring"), allow(unused_mut))]
     fn default() -> ReadOptions {
-        unsafe {
+        let mut options = unsafe {
             ReadOptions {
                 inner: ffi::rocksdb_readoptions_create(),
                 iterate_upper_bound: None,
                 iterate_lower_bound: None,
             }
-        }
+        };
+
+        // if io-uring is enabled, set async to be enabled by default
+        #[cfg(feature = "io_uring")]
+        options.set_async_io(true);
+
+        options
     }
 }
 

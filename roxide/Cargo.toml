@@ -13,7 +13,7 @@ publish = ["elastio-private"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["anyhow", "static", "lz4", "zstd", "io_uring"]
+default = ["anyhow", "static", "lz4", "zstd"]
 
 # Link RocksDB and all of its dependencies as a static library
 static = ["roxide-librocksdb-sys/static"]
@@ -25,6 +25,21 @@ lz4 = ["roxide-librocksdb-sys/lz4", "rocksdb/lz4"]
 zstd = ["roxide-librocksdb-sys/zstd", "rocksdb/zstd"]
 
 # Enable async I/O with io_uring (on Linux only; on other platforms as no effect)
+#
+# NOTE: enabling this will cause the resulting Rust binary to have compile-time and runtime dependencies on the
+# following C++ libraries:
+# - folly
+# - boost
+# - glog
+#
+# Plus the C library io_uring.
+#
+# These must be installed as packages on the system where this code is compiled, and also must be present
+# at runtime for dynamic linking.
+#
+# Note also that currently enabling this feature will always set `async_io` in `ReadOptions` to true, but as of RocksDB
+# 8.0.0 only iterator reads and `MultiGet` actually do anything asynchronously.  That plus the fact that enabling this
+# will add a run-time dependency to the resulting binary is why this feature is not enabled by default.
 io_uring = ["roxide-librocksdb-sys/io_uring", "rocksdb/io_uring"]
 
 # By default, enable deadlock detection when using the pessimistic locking TransactionDb type

@@ -3,22 +3,21 @@ name = "roxide-rocksdb"
 description = "Elastio's fork of `rocksdb` crate which `roxide` wraps and makes more Rust-y"
 version = "5.2.3-dev"
 edition = "2021"
-authors = ["Tyler Neely <t@jujit.su>", "David Greenberg <dsg123456789@gmail.com>", "Adam Nelson <adam@elastio.com>"]
+authors = [
+	"Tyler Neely <t@jujit.su>",
+	"David Greenberg <dsg123456789@gmail.com>",
+	"Adam Nelson <adam@elastio.com>",
+]
 repository = "https://github.com/elastio/roxide"
 license = "Apache-2.0"
-categories = [ "database" ]
+categories = ["database"]
 keywords = ["database", "embedded", "LSM-tree", "persistence"]
 homepage = "https://github.com/elastio/roxide"
-exclude = [
-    ".gitignore",
-    ".travis.yml",
-    "deploy.sh",
-    "test/**/*",
-]
+exclude = [".gitignore", ".travis.yml", "deploy.sh", "test/**/*"]
 publish = ["elastio-private"]
 
 [features]
-default = ["snappy", "lz4", "zstd", "zlib", "bzip2", "io_uring"]
+default = ["snappy", "lz4", "zstd", "zlib", "bzip2"]
 valgrind = []
 snappy = ["roxide-librocksdb-sys/snappy"]
 lz4 = ["roxide-librocksdb-sys/lz4"]

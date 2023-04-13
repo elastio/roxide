@@ -16,6 +16,8 @@ mod handle;
 mod checkpoint;
 mod events;
 mod file_checksum_gen;
+#[cfg(feature = "io_uring")]
+mod io_uring;
 mod iterator;
 mod labels;
 mod logging;
