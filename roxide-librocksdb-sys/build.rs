@@ -186,14 +186,12 @@ fn build_rocksdb() {
         //
         // This will produce Rust binaries that will fail to start if run on a system without
         // liburing.  That's a pity.
-        if cfg!(feature = "io_uring")
-        {
+        if cfg!(feature = "io_uring") {
             add_define(&mut config, &mut defines, "ROCKSDB_IOURING_PRESENT", None);
             println!("cargo:rustc-link-lib=uring");
         }
 
-        if cfg!(feature = "folly")
-        {
+        if cfg!(feature = "folly") {
             // If the use of the facebook open source library "folly" is enabled, then we can use
             // coroutines for async support.
             add_define(&mut config, &mut defines, "USE_COROUTINES", None);
