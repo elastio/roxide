@@ -1544,10 +1544,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
         opts: &IngestExternalFileOptions,
         paths: Vec<P>,
     ) -> Result<(), Error> {
-        let paths_v: Vec<CString> = paths
-            .iter()
-            .map(|path| to_cpath(&path))
-            .collect::<Result<Vec<_>, _>>()?;
+        let paths_v: Vec<CString> = paths.iter().map(to_cpath).collect::<Result<Vec<_>, _>>()?;
 
         let cpaths: Vec<_> = paths_v.iter().map(|path| path.as_ptr()).collect();
 
@@ -1572,10 +1569,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
         opts: &IngestExternalFileOptions,
         paths: Vec<P>,
     ) -> Result<(), Error> {
-        let paths_v: Vec<CString> = paths
-            .iter()
-            .map(|path| to_cpath(&path))
-            .collect::<Result<Vec<_>, _>>()?;
+        let paths_v: Vec<CString> = paths.iter().map(to_cpath).collect::<Result<Vec<_>, _>>()?;
 
         let cpaths: Vec<_> = paths_v.iter().map(|path| path.as_ptr()).collect();
 

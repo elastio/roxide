@@ -678,7 +678,7 @@ mod test {
             });
         });
 
-        let err = result.err().expect("expected to capture panic");
+        let err = result.expect_err("expected to capture panic");
         let err = err
             .downcast::<&'static str>()
             .expect("panic was not of the expected type");

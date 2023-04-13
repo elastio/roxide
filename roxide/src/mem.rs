@@ -66,7 +66,7 @@ impl Deref for DbVector {
 impl AsRef<[u8]> for DbVector {
     fn as_ref(&self) -> &[u8] {
         // Implement this via Deref so as not to repeat ourselves
-        &*self
+        self
     }
 }
 

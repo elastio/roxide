@@ -60,7 +60,7 @@ enum RocksDbPerfLevel {
 ///
 /// `Minimal` doesn't impose much of an overhead and can be used at all times.  `Full` will impose
 /// considerable overhead and should only be used when sampling or when tracing a specific request.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Eq)]
 pub enum PerfLevel {
     Minimal,
 

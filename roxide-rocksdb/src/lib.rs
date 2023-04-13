@@ -128,7 +128,7 @@ use std::fmt;
 
 /// A simple wrapper round a string, used for errors reported from
 /// ffi calls.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     message: String,
 }

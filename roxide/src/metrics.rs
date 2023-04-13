@@ -303,7 +303,7 @@ lazy_static! {
             // Translate the rocks naming convention, using "." as the separator, to the prometheus
             // convention which uses "_".  Also the `-` character is not looked upon very kindly
             let property_name = property.name();
-            let metric_name = property_name.replace('.', "_").replace('-', "_");
+            let metric_name = property_name.replace(['.', '-'], "_");
 
             let gauge = ColumnFamilyLabels::register_float_gauge(metric_name,
                 *description).unwrap();

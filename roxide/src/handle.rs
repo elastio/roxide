@@ -498,8 +498,6 @@ mod test {
             // There was no handle passed in, so the default should have been used
             assert_eq!(cow1.rocks_ptr().as_ptr(), default_usize_ptr());
 
-            drop(cow1);
-
             // the defalt test struct will have been freed here.  Unfortunately we cant' confirm
             // this because the static usize pointer is read-only so we're unable to properly
             // simulate a drop.  I'm open to ideas for how to test this case better
@@ -515,7 +513,6 @@ mod test {
 
             // When the cow is dropped this time, nothing is freed, because the test struct itself
             // is responsible for freeing the handle when it drops
-            drop(cow2);
             assert_eq!(delete_count, 0);
         }
 
