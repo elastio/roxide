@@ -179,6 +179,49 @@ fn build_rocksdb() {
         add_define(&mut config, &mut defines, "OS_LINUX", None);
         add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
         add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
+
+        // Assume liburing is present and link to the shared library.
+        // It would be preferable to statically link obviously, but something like liburing should
+        // be versioned along with the running system and not compiled into the binary.
+        //
+        // This will produce Rust binaries that will fail to start if run on a system without
+        // liburing.  That's a pity.
+        if cfg!(feature = "io_uring")
+        {
+            add_define(&mut config, &mut defines, "ROCKSDB_IOURING_PRESENT", None);
+            println!("cargo:rustc-link-lib=uring");
+        }
+
+        // The following are detected dynamically in the CMakeLists.txt file in the official
+        // RocksDB build.  We dont' have access to cmake so we just assume these are present
+        // because we've made them a required part of our build environment on Linux.
+
+        add_define(&mut config, &mut defines, "ROCKSDB_FALLOCATE_PRESENT", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_RANGESYNC_PRESENT", None);
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_PTHREAD_ADAPTIVE_MUTEX",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_MALLOC_USABLE_SIZE",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_SCHED_GETCPU_PRESENT",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_AUXV_GETAUXVAL_PRESENT",
+            None,
+        );
     } else if target.contains("freebsd") {
         add_define(&mut config, &mut defines, "OS_FREEBSD", None);
         add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);

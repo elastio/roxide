@@ -18,6 +18,10 @@ ergonomic Rust API and a lot of functionality missing in `rust-rocksdb` (transac
 Note that the version numbers from `rust-rocksdb` were reset when we make a fork.  That project set the version of
 `librocksdb-sys` to correspond with the version of RocksDB that it wrapped, but we don't do that.
 
+## Required Dependencies
+
+- This requires `liburing` be present to enable async I/O support.  On Fedora that's the `liburing-devel` package.
+
 
 # Credits
 

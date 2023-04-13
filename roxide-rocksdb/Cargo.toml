@@ -18,13 +18,14 @@ exclude = [
 publish = ["elastio-private"]
 
 [features]
-default = ["snappy", "lz4", "zstd", "zlib", "bzip2"]
+default = ["snappy", "lz4", "zstd", "zlib", "bzip2", "io_uring"]
 valgrind = []
 snappy = ["roxide-librocksdb-sys/snappy"]
 lz4 = ["roxide-librocksdb-sys/lz4"]
 zstd = ["roxide-librocksdb-sys/zstd"]
 zlib = ["roxide-librocksdb-sys/zlib"]
 bzip2 = ["roxide-librocksdb-sys/bzip2"]
+io_uring = ["roxide-librocksdb-sys/io_uring"]
 multi-threaded-cf = []
 
 [dependencies]

@@ -13,7 +13,7 @@ publish = ["elastio-private"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["anyhow", "static", "lz4", "zstd"]
+default = ["anyhow", "static", "lz4", "zstd", "io_uring"]
 
 # Link RocksDB and all of its dependencies as a static library
 static = ["roxide-librocksdb-sys/static"]
@@ -23,6 +23,9 @@ lz4 = ["roxide-librocksdb-sys/lz4", "rocksdb/lz4"]
 
 # Enable zstd compression in RocksDB
 zstd = ["roxide-librocksdb-sys/zstd", "rocksdb/zstd"]
+
+# Enable async I/O with io_uring (on Linux only; on other platforms as no effect)
+io_uring = ["roxide-librocksdb-sys/io_uring", "rocksdb/io_uring"]
 
 # By default, enable deadlock detection when using the pessimistic locking TransactionDb type
 # This can always be enabled or disabled at runtime on a single `TransactionOptions` instance,

@@ -20,6 +20,7 @@ lz4 = []
 zstd = []
 zlib = []
 bzip2 = []
+io_uring = []
 
 # Enable jemalloc support in RocksDB
 jemalloc = ["jemalloc-sys"]
