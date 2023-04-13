@@ -97,7 +97,7 @@ jobs:
           profile: minimal
 
       # set up dependencies so that the async version with io_uring support can build
-      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev liburing-dev
+      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev liburing-dev libunwind-dev libgoogle-glog-dev
       - uses: actions/checkout@v3
         with:
           repository: facebook/folly
