@@ -86,7 +86,7 @@ jobs:
         # On macOS there was some duplicate symbol error from the linker for
         # `crc32c_runtime_check` which, again, I didn't bother to run down
         # because we don't care about Rocks on macOS
-        os: [ubuntu-latest]
+        os: [ubuntu-22.04]
 
     steps:
       - uses: actions/checkout@v3
