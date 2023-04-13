@@ -40,6 +40,7 @@ jobs:
           submodules: recursive
       - uses: EmbarkStudios/cargo-deny-action@v1
         with:
+          credentials: https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io
           command: check ${{ matrix.checks }}
 
   rust-lint:
@@ -62,6 +63,8 @@ jobs:
         with:
           profile: minimal
           components: rustfmt, clippy
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
@@ -108,6 +111,8 @@ jobs:
           python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build --no-tests --install-prefix $PWD/..
 
 
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
+
       - run: cargo test --workspace --no-run
       # Test with default features and all features
       - run: cargo test --workspace
@@ -127,6 +132,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo test --workspace --all-targets --all-features
 
