@@ -87,9 +87,9 @@ pub unsafe extern "C" fn delete_callback(
 ) {
     if !value.is_null() {
         drop(Box::from_raw(slice::from_raw_parts_mut(
-                    value as *mut u8,
-                    value_length as usize,
-                    )));
+            value as *mut u8,
+            value_length as usize,
+        )));
     }
 }
 
