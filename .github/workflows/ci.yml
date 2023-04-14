@@ -102,7 +102,11 @@ jobs:
         with:
           repository: facebook/folly
           submodules: recursive
-          ref: v2023.04.10.00  # folly doesn't have a release schedule, this was the latest at the time of this writing
+          # folly doesn't have a release schedule, this old tag is the most recent that builds cleanly with the old
+          # kernel headers that ship with the kernel on the Github Ubuntu 22.04 build runner.  Folly uses io_uring and
+          # doesn't make any attempt to be backward-compatible with earlier versions of the Linux kernel, so versions of
+          # folly older than this wont' compile cleanly because of missing #defines in the kernel iouring.h header file.
+          ref: v2022.07.11.00
           path: folly-is-shit
 
       - run: |
