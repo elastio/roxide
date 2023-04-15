@@ -3003,7 +3003,7 @@ impl ReadOptions {
 }
 
 impl Default for ReadOptions {
-    #[cfg_attr(not(feature = "io_uring"), allow(unused_mut))]
+    #[cfg_attr(not(feature = "io_uring"), allow(unused_mut, clippy::let_and_return))]
     fn default() -> ReadOptions {
         let mut options = unsafe {
             ReadOptions {
