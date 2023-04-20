@@ -10,7 +10,8 @@ fn main() {
     let mut config = cpp_build::Config::new();
 
     // Rocks starting from 7.0 requires C++ 17
-    config.flag("-std=c++17");
+    // C++20 is required if building folly for io_uring support
+    config.flag("-std=c++20");
 
     for include_path in include_paths {
         config.include(&include_path);

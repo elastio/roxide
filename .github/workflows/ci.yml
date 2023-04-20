@@ -82,7 +82,10 @@ jobs:
       - run: cargo doc --workspace --no-deps
       # Run clippy with default features, and also with all features
       - run: cargo clippy --workspace --all-targets
-      - run: cargo clippy --workspace --all-targets --all-features
+
+      # NB: can't lint `all-features` here because that includes the io_uring feature which won't compile
+      # without the nasty C++ monstrosity folly.  So this happens in `rust-test` instead, where folly is already built
+      # - run: cargo clippy --workspace --all-targets --all-features
 
   rust-test:
     runs-on: ${{ matrix.os }}
@@ -139,6 +142,8 @@ jobs:
       - run: cargo test --workspace
 
       # This will activate the io_uring feature which brings in a dep on liburing and folly
+      # NOTE: lint here as well as test since we can't link all-features in the lint step because it requires folly
+      - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo test --workspace --all-features
 
   rust-code-coverage:
