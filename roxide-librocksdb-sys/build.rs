@@ -185,15 +185,13 @@ fn build_rocksdb() {
         add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
         add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
 
-        // Assume liburing is present and link to the shared library.
-        // It would be preferable to statically link obviously, but something like liburing should
-        // be versioned along with the running system and not compiled into the binary.
-        //
-        // This will produce Rust binaries that will fail to start if run on a system without
-        // liburing.  That's a pity.
+        // See elsehwere `build_io_uring` where we build liburing from source.  This will
+        // statically link liburing.  According to the liburing docs, newer liburing can run
+        // against older kernel versions, although newer kernel uring features are obviously not
+        // available in that case.
         if cfg!(feature = "io_uring") {
             add_define(&mut config, &mut defines, "ROCKSDB_IOURING_PRESENT", None);
-            println!("cargo:rustc-link-lib=uring");
+            println!("cargo:rustc-link-lib=static=uring");
         }
 
         if cfg!(feature = "folly") {
@@ -641,6 +639,37 @@ fn build_folly(config: &mut cc::Build) {
     println!("Folly has been built from source.  We'll find out later if it links cleanly or not");
 }
 
+fn build_io_uring() {
+    let mut config = cc::Build::new();
+
+    config.include("liburing/src/include");
+    config.include(".");
+    config.define("LIBURING_INTERNAL", None);
+    config.define("_GNU_SOURCE", None);
+
+    // The following defines taken from `config-host.h`, which is produced by running `./configure`
+    // in the `liburing` root.
+    config.define("CONFIG_HAVE_KERNEL_RWF_T", None);
+    config.define("CONFIG_HAVE_KERNEL_TIMESPEC", None);
+    config.define("CONFIG_HAVE_OPEN_HOW", None);
+    config.define("CONFIG_HAVE_STATX", None);
+    config.define("CONFIG_HAVE_GLIBC_STATX", None);
+    config.define("CONFIG_HAVE_CXX", None);
+    config.define("CONFIG_HAVE_UCONTEXT", None);
+    config.define("CONFIG_HAVE_STRINGOP_OVERFLOW", None);
+    config.define("CONFIG_HAVE_ARRAY_BOUNDS", None);
+    config.define("CONFIG_HAVE_NVME_URING", None);
+
+    // End defines from config-host.h
+
+    config.flag_if_supported("-Wno-stack-protector");
+
+    for file in ["setup.c", "queue.c", "register.c", "syscall.c"] {
+        config.file(format!("liburing/src/{file}"));
+    }
+    config.compile("uring"); // produces liburing.a
+}
+
 fn build_snappy() {
     let target = env::var("TARGET").unwrap();
     let endianness = env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
@@ -820,6 +849,11 @@ fn main() {
         } else if target.contains("linux") {
             println!("cargo:rustc-link-lib=dylib=stdc++");
         }
+    }
+    if cfg!(feature = "io_uring") && !try_to_find_and_link_lib("LIBURING") {
+        println!("cargo:rerun-if-changed=liburing/");
+        fail_on_empty_directory("liburing");
+        build_io_uring();
     }
     if cfg!(feature = "snappy") && !try_to_find_and_link_lib("SNAPPY") {
         println!("cargo:rerun-if-changed=snappy/");

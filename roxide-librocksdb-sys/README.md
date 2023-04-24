@@ -8,7 +8,7 @@ https://github.com/rust-rocksdb/rust-rocksdb
 and Jeremy Fitzhardinge
 https://github.com/jsgf/rocksdb-sys
 
-# Updating to a new version
+# Updating to a new version of RocksDB
 
 1. `cd` to the `rocksdb` submodule directory where the RocksDB sources are checked out
   1. Update the `rocksdb` submodule to the tag for whatever the new release is.  
@@ -24,4 +24,16 @@ https://github.com/jsgf/rocksdb-sys
      version.  Note that this change needs to be made to all three crates in this workspace; see the root-level
      `README.md` for more details
 
+# Updating to a new version of liburing
+
+The `liburing` folder contains a submodule with the most recent release of liburing.  This needs to be updated from time
+to time as RocksDB uses the latest and greatest features.
+
+To do so:
+
+1. `cd` into `liburing`
+1. Go a `git pull` and then checkout whatever tag corresponds to the version you want
+1. Run `./configure` to generate the config header `config-host.h`.
+1. Modify the `build_io_uring` function in `build.rs` to make sure all defines from `config-host.h` are defined when
+   building
 

@@ -117,23 +117,9 @@ jobs:
           components: rustfmt, clippy
 
       # set up dependencies so that the async version with io_uring support can build
+      # This may not be all deps that are required to get async support compiling.  I gave up on it but
+      # to get as far as I did required tehse additional packages
       - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev liburing-dev libunwind-dev libgoogle-glog-dev
-      - uses: actions/checkout@v3
-        with:
-          repository: facebook/folly
-          submodules: recursive
-          # folly doesn't have a release schedule, this old tag is the most recent that builds cleanly with the old
-          # kernel headers that ship with the kernel on the Github Ubuntu 22.04 build runner.  Folly uses io_uring and
-          # doesn't make any attempt to be backward-compatible with earlier versions of the Linux kernel, so versions of
-          # folly older than this wont' compile cleanly because of missing #defines in the kernel iouring.h header file.
-          ref: v2022.07.11.00
-          path: folly-is-shit
-
-      - run: |
-          cd folly-is-shit
-          sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive
-          sudo python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build --no-tests  --install-dir /usr
-
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
