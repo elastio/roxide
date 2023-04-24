@@ -13,3 +13,6 @@
 [submodule "roxide-librocksdb-sys/rocksdb"]
 	path = roxide-librocksdb-sys/rocksdb
 	url = https://github.com/facebook/rocksdb.git
+[submodule "roxide-librocksdb-sys/folly"]
+	path = roxide-librocksdb-sys/folly
+	url = https://github.com/facebook/folly.git
