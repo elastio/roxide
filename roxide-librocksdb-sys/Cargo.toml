@@ -28,7 +28,7 @@ bzip2 = []
 # TODO: if building folly is ever made reliable, it should be enabled when io_uring is
 # without folly, Rocks will compile fine with io uring enabled but it won't actually do async IO
 io_uring = []
-folly = ["duct", "pkg-config"]
+# folly = ["duct", "pkg-config"]
 
 # Enable jemalloc support in RocksDB
 jemalloc = ["jemalloc-sys"]
