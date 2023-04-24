@@ -22,6 +22,36 @@ Note that the version numbers from `rust-rocksdb` were reset when we make a fork
 
 - This requires `liburing` be present to enable async I/O support.  On Fedora that's the `liburing-devel` package.
 
+# WIP - Async Support
+
+When updating to RocksDB 8.1, I tried to add support for async `MultiGet`.  Unfortunately I failed, but I left all of
+the pieces in place in the hopes that some brave soul can finish this work later.
+
+The featuer `io_uring` in roxide and in lower-level crates sets #defines to enable this in RocksDB.  However the RocksDB
+docs are clear that async support in `MultiGet` requires the Facebook C++ ~~radioactive dumpster fire~~ framework
+`folly` in order to function.  I tried for days to get that piece of shit to compile and link cleanly on both a local
+dev system and our CI system, with no success.
+
+So I left the `io_uring` feature in place (just know that it doesn't actually enable async `MultiGet`, but it might
+enable async iterators, the docs are ambiguous), but I commented out the `folly` feature because otherwise
+`--all-features` builds would fail.  I left in place in `build.rs` the `build_folly` method (conditional on the
+`follly`) feature being enabled), but what's in that function doesn't work right.  I could not get it to compile and
+link cleanly.  
+
+`folly` uses a python script (yes really) to wrap all of the contortions required to compile it.  There is an option to
+install dependencies, and that option can either download and compile from source the dependencies, or try to install
+system packages.  Then there's another option in the Pythong script to build folly, and that can optionally try to use
+system pacakges for deps or not.  Neither of these options worked.  
+
+I tried to use the `pkg-config` entry that is in the Folly code for `libfolly`, but it must not be used by facebook
+because it's missing many of the dependencies that libfolly actually has.  I tried explicitly adding these one at a time
+but that didn't work either, because then I ran into problems with the include paths for `fmt`, conflicting between the
+locally installed Fedora package (which is apparently old), and the latest and greatest built from source.
+
+All of this was just not worth it, especially since we have no idea if any of that async crap will actually lead to
+a measurable performance improvement.
+
+
 
 # Credits
 
