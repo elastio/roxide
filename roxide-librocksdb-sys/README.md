@@ -11,7 +11,7 @@ https://github.com/jsgf/rocksdb-sys
 # Updating to a new version of RocksDB
 
 1. `cd` to the `rocksdb` submodule directory where the RocksDB sources are checked out
-  1. Update the `rocksdb` submodule to the tag for whatever the new release is.  
+  1. Update the `rocksdb` submodule to the tag for whatever the new release is.
   1. ~~In the `rocksdb` subdirectory run `make util/build_version.cc`~~
      As of 6.20 this no longer works; instead do `make -j16 static_lib` instead
   1. Run `make unity.cc`
@@ -36,6 +36,9 @@ To do so:
    a subdirectory like `liburing-liburing-2.3`.
 1. rename the newly extracted subdirectory to just `liburing`
 1. cd into `liburing`
+1. modify the `.gitignore` file to remove the following entries:
+       src/include/liburing/compat.h
+       config-host.h
 1. Run `./configure` to generate the config header `config-host.h` and also the `compat.h` header plus probably some
    other cruft
 1. commit the changes to the repo accordingly.

@@ -9,7 +9,6 @@
 
 /src/liburing.a
 /src/liburing.so*
-/src/include/liburing/compat.h
 
 /examples/io_uring-cp
 /examples/io_uring-test
@@ -23,7 +22,6 @@
 /test/*.dmesg
 /test/output/
 
-config-host.h
 config-host.mak
 config.log
 

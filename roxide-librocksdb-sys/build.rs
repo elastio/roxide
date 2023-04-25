@@ -833,13 +833,6 @@ fn cxx_standard() -> String {
 fn main() {
     bindgen_rocksdb();
 
-    // ANELSON TESTING REMOVE
-    if cfg!(feature = "io_uring") && !try_to_find_and_link_lib("LIBURING") {
-        println!("cargo:rerun-if-changed=liburing/");
-        fail_on_empty_directory("liburing");
-        build_io_uring();
-    }
-
     if !try_to_find_and_link_lib("ROCKSDB") {
         println!("cargo:rerun-if-changed=rocksdb/");
         fail_on_empty_directory("rocksdb");
