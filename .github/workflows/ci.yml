@@ -78,7 +78,7 @@ jobs:
 
 
       # io_uring needs this to compile properly
-      - run: sudo apt-get linux-headers
+      - run: sudo apt-get -y linux-headers
         if: matrix.os == 'ubuntu-latest'
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
