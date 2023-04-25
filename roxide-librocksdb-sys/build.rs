@@ -87,7 +87,7 @@ fn build_rocksdb() {
     }
 
     if cfg!(feature = "io_uring") {
-        include_paths.push("liburing/src/include".into());
+        include_paths.push("liburing/src/include/".into());
     }
 
     if cfg!(feature = "snappy") {
