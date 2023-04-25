@@ -86,6 +86,10 @@ fn build_rocksdb() {
         build_folly(&mut config);
     }
 
+    if cfg!(feature = "io_uring") {
+        include_paths.push("liburing/src/include".into());
+    }
+
     if cfg!(feature = "snappy") {
         add_define(&mut config, &mut defines, "SNAPPY", "1");
         include_paths.push("snappy/".into());
