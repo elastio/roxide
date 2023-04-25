@@ -76,6 +76,11 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
+
+      # io_uring needs this to compile properly
+      - run: sudo apt-get linux-headers
+        if: matrix.os == 'ubuntu-latest'
+
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo fmt --all -- --check
@@ -114,7 +119,7 @@ jobs:
       # set up dependencies so that the async version with io_uring support can build
       # This may not be all deps that are required to get async support compiling.  I gave up on it but
       # to get as far as I did required tehse additional packages
-      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev libunwind-dev libgoogle-glog-dev
+      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev libunwind-dev libgoogle-glog-dev linux-headers
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 

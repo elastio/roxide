@@ -37,6 +37,8 @@ jobs:
           profile: minimal
           components: rustfmt, clippy
 
+      - run: sudo apt-get linux-headers
+
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
       - run: cargo clippy --workspace --all-targets --all-features
