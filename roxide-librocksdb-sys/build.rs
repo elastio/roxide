@@ -653,7 +653,10 @@ fn build_io_uring() {
 
     // Load the config defines directly from a header file
     config.flag("-include");
-    config.flag(concat!(env!("CARGO_MANIFEST_DIR"), "/liburing/config-host.h"));
+    config.flag(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/liburing/config-host.h"
+    ));
 
     config.flag_if_supported("-Wno-stack-protector");
 
