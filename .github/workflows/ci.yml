@@ -78,13 +78,9 @@ jobs:
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
-        # TODO: run this last
-      - run: tree roxide-librocksdb-sys/liburing || echo "There is no tree"
-      # Run clippy with default features, and also with all features
-      - run: cargo clippy --workspace --all-targets --all-features
-
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
+      - run: cargo clippy --workspace --all-targets --all-features
 
   rust-test:
     runs-on: ${{ matrix.os }}
@@ -118,17 +114,12 @@ jobs:
       # set up dependencies so that the async version with io_uring support can build
       # This may not be all deps that are required to get async support compiling.  I gave up on it but
       # to get as far as I did required tehse additional packages
-      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev liburing-dev libunwind-dev libgoogle-glog-dev
+      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev libunwind-dev libgoogle-glog-dev
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo test --workspace --no-run
-      # Test with default features and all features.  This doesn't use io_uring or have a folly dep
       - run: cargo test --workspace
-
-      # This will activate the io_uring feature which brings in a dep on liburing and folly
-      # NOTE: lint here as well as test since we can't link all-features in the lint step because it requires folly
-      - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo test --workspace --all-features
 
   rust-code-coverage:

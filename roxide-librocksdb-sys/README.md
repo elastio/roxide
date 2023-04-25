@@ -26,14 +26,17 @@ https://github.com/jsgf/rocksdb-sys
 
 # Updating to a new version of liburing
 
-The `liburing` folder contains a submodule with the most recent release of liburing.  This needs to be updated from time
-to time as RocksDB uses the latest and greatest features.
+`liburing` can't be included as a submodule, because the code as it exists in the git repo isn't compilable as it is.
+So updating liburing means downloading a new source tarball, extracting it, and then running some preparatory commands
+to get the code in a buildable state
 
 To do so:
 
-1. `cd` into `liburing`
-1. Go a `git pull` and then checkout whatever tag corresponds to the version you want
-1. Run `./configure` to generate the config header `config-host.h`.
-1. Modify the `build_io_uring` function in `build.rs` to make sure all defines from `config-host.h` are defined when
-   building
+1. download the latest source tarball and extract it into the `roxide-librocksdb-sys` directory.  That will result in
+   a subdirectory like `liburing-liburing-2.3`.
+1. rename the newly extracted subdirectory to just `liburing`
+1. cd into `liburing`
+1. Run `./configure` to generate the config header `config-host.h` and also the `compat.h` header plus probably some
+   other cruft
+1. commit the changes to the repo accordingly.
 

@@ -651,20 +651,9 @@ fn build_io_uring() {
     config.define("LIBURING_INTERNAL", None);
     config.define("_GNU_SOURCE", None);
 
-    // The following defines taken from `config-host.h`, which is produced by running `./configure`
-    // in the `liburing` root.
-    config.define("CONFIG_HAVE_KERNEL_RWF_T", None);
-    config.define("CONFIG_HAVE_KERNEL_TIMESPEC", None);
-    config.define("CONFIG_HAVE_OPEN_HOW", None);
-    config.define("CONFIG_HAVE_STATX", None);
-    config.define("CONFIG_HAVE_GLIBC_STATX", None);
-    config.define("CONFIG_HAVE_CXX", None);
-    config.define("CONFIG_HAVE_UCONTEXT", None);
-    config.define("CONFIG_HAVE_STRINGOP_OVERFLOW", None);
-    config.define("CONFIG_HAVE_ARRAY_BOUNDS", None);
-    config.define("CONFIG_HAVE_NVME_URING", None);
-
-    // End defines from config-host.h
+    // Load the config defines directly from a header file
+    config.flag("-include");
+    config.flag(concat!(env!("CARGO_MANIFEST_DIR"), "/liburing/config-host.h"));
 
     config.flag_if_supported("-Wno-stack-protector");
 
