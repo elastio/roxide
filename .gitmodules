@@ -16,6 +16,3 @@
 [submodule "roxide-librocksdb-sys/folly"]
 	path = roxide-librocksdb-sys/folly
 	url = https://github.com/facebook/folly.git
-[submodule "roxide-librocksdb-sys/liburing"]
-	path = roxide-librocksdb-sys/liburing
-	url = https://github.com/axboe/liburing.git
