@@ -1274,7 +1274,7 @@ mod test {
                     let key = key.to_le_bytes();
 
                     // If there is no value, make up an initial value.
-                    let value = match tx.get_for_update(cf, &key, None)? {
+                    let value = match tx.get_for_update(cf, key, None)? {
                         None => 0u64,
                         Some(value) => {
                             let mut bytes = [0u8; 8];

@@ -16,6 +16,8 @@ mod handle;
 mod checkpoint;
 mod events;
 mod file_checksum_gen;
+#[cfg(feature = "io_uring")]
+mod io_uring;
 mod iterator;
 mod labels;
 mod logging;
@@ -99,14 +101,14 @@ impl Drop for TempDbPath {
         trace!(temp_dir = %self.temp_dir.path().display(),
             "Destroying database in temp directory");
         // It's important not to panic inside `drop`
-        let _dontcare = crate::db::Db::destroy(None, &self.temp_dir.path());
+        let _dontcare = crate::db::Db::destroy(None, self.temp_dir.path());
 
         // Some test cases cause other files to be created in a DB dir, not just the database
         // files themselves.  So in addition to the above, explicitly delete the entire
         // directory
         trace!(temp_dir = %self.temp_dir.path().display(),
             "Removing temp directory entirely");
-        let _dontcare = std::fs::remove_dir_all(&self.temp_dir.path());
+        let _dontcare = std::fs::remove_dir_all(self.temp_dir.path());
     }
 }
 

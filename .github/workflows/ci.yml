@@ -8,8 +8,8 @@ on:
 
 env:
   # Just a reassurance to mitigate sudden network connection problems
-  CARGO_NET_RETRY: 10
-  RUSTUP_MAX_RETRIES: 10
+  CARGO_NET_RETRY: 50
+  RUSTUP_MAX_RETRIES: 50
 
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
@@ -17,9 +17,6 @@ env:
   # We don't need any debug symbols on ci, this also speeds up builds a bunch
   RUSTFLAGS: --deny warnings -Cdebuginfo=0
   RUSTDOCFLAGS: --deny warnings
-
-  CARGO_REGISTRIES_ELASTIO_PRIVATE_INDEX: ${{ secrets.PRIVATE_REGISTRY_TOKEN_URL }}
-  CARGO_REGISTRIES_ELASTIO_PRIVATE_TOKEN: ${{ secrets.CLOUDSMITH_API_TOKEN }}
 
 concurrency:
   cancel-in-progress: true
@@ -38,11 +35,20 @@ jobs:
     continue-on-error: ${{ matrix.checks == 'advisories' }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - name: Read rust-toolchain file
+        id: rust-toolchain
+        run: |
+          echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
       - uses: EmbarkStudios/cargo-deny-action@v1
         with:
+          credentials: https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io
           command: check ${{ matrix.checks }}
 
   rust-lint:
@@ -58,19 +64,28 @@ jobs:
         os: [macos-latest, ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
+      - name: Read rust-toolchain file
+        id: rust-toolchain
+        run: |
+          echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
       # Run clippy with default features, and also with all features
       - run: cargo clippy --workspace --all-targets
-      - run: cargo clippy --workspace --all-targets --all-features
+
+      # NB: can't lint `all-features` here because that includes the io_uring feature which won't compile
+      # without the nasty C++ monstrosity folly.  So this happens in `rust-test` instead, where folly is already built
+      # - run: cargo clippy --workspace --all-targets --all-features
 
   rust-test:
     runs-on: ${{ matrix.os }}
@@ -89,16 +104,32 @@ jobs:
         os: [ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
+      - name: Read rust-toolchain file
+        id: rust-toolchain
+        run: |
+          echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      # set up dependencies so that the async version with io_uring support can build
+      # This may not be all deps that are required to get async support compiling.  I gave up on it but
+      # to get as far as I did required tehse additional packages
+      - run: sudo apt-get install -y libboost-all-dev  g++ openssl libssl-dev liburing-dev libunwind-dev libgoogle-glog-dev
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo test --workspace --no-run
-      # Test with default features and all features
+      # Test with default features and all features.  This doesn't use io_uring or have a folly dep
       - run: cargo test --workspace
+
+      # This will activate the io_uring feature which brings in a dep on liburing and folly
+      # NOTE: lint here as well as test since we can't link all-features in the lint step because it requires folly
+      - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo test --workspace --all-features
 
   rust-code-coverage:
@@ -109,12 +140,14 @@ jobs:
       RUSTC_BOOTSTRAP: 1
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo test --workspace --all-targets --all-features
 
@@ -142,40 +175,3 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "${{ github.workspace }}/lcov.info"
 
-  # If the build passes on `master`, publish the crates with a `-dev` pre-release version
-  # to cloudsmith.
-  #
-  # Real production releases are handled by the `release.yml` workflow
-  publish-crates:
-    # Publishing happens only on pushes to master. Other branches and PRs don't count
-    if: ${{ github.ref == 'refs/heads/master' }}
-    runs-on: ubuntu-latest
-
-    # This job must execute only if all checks pass!
-    needs:
-      - cargo-deny-check
-      - rust-lint
-      - rust-test
-
-    env:
-      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_TOKEN }}
-
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-
-      # Install cloudsmith CLI via pip
-      - uses: actions/setup-python@v1
-      - uses: BSFishy/pip-action@v1
-        with:
-          packages: |
-            cloudsmith-cli
-
-      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force --debug
-
-      # Perform the actual release operations
-      - run: cargo xelastio publish master

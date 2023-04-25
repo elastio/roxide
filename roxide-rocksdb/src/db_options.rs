@@ -497,24 +497,6 @@ impl BlockBasedOptions {
         }
     }
 
-    /// When configured: use the specified cache for compressed blocks.
-    /// Otherwise rocksdb will not use a compressed block cache.
-    ///
-    /// Note: though it looks similar to `block_cache`, RocksDB doesn't put the
-    /// same type of object there.
-    #[deprecated(
-        since = "0.15.0",
-        note = "This function will be removed in next release. Use set_block_cache_compressed instead"
-    )]
-    pub fn set_lru_cache_compressed(&mut self, size: size_t) {
-        let cache = new_cache(size);
-        unsafe {
-            // Since cache is wrapped in shared_ptr, we don't need to
-            // call rocksdb_cache_destroy explicitly.
-            ffi::rocksdb_block_based_options_set_block_cache_compressed(self.inner, cache);
-        }
-    }
-
     /// Sets global cache for blocks (user data is stored in a set of blocks, and
     /// a block is the unit of reading from disk). Cache must outlive DB instance which uses it.
     ///
@@ -525,16 +507,6 @@ impl BlockBasedOptions {
             ffi::rocksdb_block_based_options_set_block_cache(self.inner, cache.0.inner);
         }
         self.outlive.block_cache = Some(cache.clone());
-    }
-
-    /// Sets global cache for compressed blocks. Cache must outlive DB instance which uses it.
-    ///
-    /// By default, rocksdb will not use a compressed block cache.
-    pub fn set_block_cache_compressed(&mut self, cache: &Cache) {
-        unsafe {
-            ffi::rocksdb_block_based_options_set_block_cache_compressed(self.inner, cache.0.inner);
-        }
-        self.outlive.block_cache_compressed = Some(cache.clone());
     }
 
     /// Disable block cache
@@ -2829,7 +2801,7 @@ impl Default for WriteOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ReadTier {
     /// Reads data in memtable, block cache, OS cache or storage.
@@ -3016,17 +2988,36 @@ impl ReadOptions {
             ffi::rocksdb_readoptions_set_pin_data(self.inner, v as c_uchar);
         }
     }
+
+    /// If true, and this was compiled with proper io_uring support, enable async I/O for this
+    /// read.
+    ///
+    /// When the io_uring feature is enabled, this is enabled by default, so this setting needs to
+    /// be called only when overriding the default and explicitly disabling async I/O.
+    #[cfg(feature = "io_uring")]
+    pub fn set_async_io(&mut self, v: bool) {
+        unsafe {
+            ffi::rocksdb_readoptions_set_async_io(self.inner, v as c_uchar);
+        }
+    }
 }
 
 impl Default for ReadOptions {
+    #[cfg_attr(not(feature = "io_uring"), allow(unused_mut, clippy::let_and_return))]
     fn default() -> ReadOptions {
-        unsafe {
+        let mut options = unsafe {
             ReadOptions {
                 inner: ffi::rocksdb_readoptions_create(),
                 iterate_upper_bound: None,
                 iterate_lower_bound: None,
             }
-        }
+        };
+
+        // if io-uring is enabled, set async to be enabled by default
+        #[cfg(feature = "io_uring")]
+        options.set_async_io(true);
+
+        options
     }
 }
 
@@ -3151,7 +3142,7 @@ pub struct PlainTableFactoryOptions {
     pub index_sparseness: usize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DBCompressionType {
     None = ffi::rocksdb_no_compression as isize,
     Snappy = ffi::rocksdb_snappy_compression as isize,
@@ -3162,14 +3153,14 @@ pub enum DBCompressionType {
     Zstd = ffi::rocksdb_zstd_compression as isize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DBCompactionStyle {
     Level = ffi::rocksdb_level_compaction as isize,
     Universal = ffi::rocksdb_universal_compaction as isize,
     Fifo = ffi::rocksdb_fifo_compaction as isize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DBRecoveryMode {
     TolerateCorruptedTailRecords = ffi::rocksdb_tolerate_corrupted_tail_records_recovery as isize,
     AbsoluteConsistency = ffi::rocksdb_absolute_consistency_recovery as isize,
@@ -3178,7 +3169,7 @@ pub enum DBRecoveryMode {
 }
 
 /// File access pattern once a compaction has started
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum AccessHint {
     None = 0,
@@ -3223,7 +3214,7 @@ impl FifoCompactOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum UniversalCompactionStopStyle {
     Similar = ffi::rocksdb_similar_size_compaction_stop_style as isize,
     Total = ffi::rocksdb_total_size_compaction_stop_style as isize,
@@ -3336,7 +3327,7 @@ impl UniversalCompactOptions {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BottommostLevelCompaction {
     /// Skip bottommost level compaction

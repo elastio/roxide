@@ -377,7 +377,7 @@ impl<'a, K: BinaryStr> From<&'a KeyRange<K>> for KeyRange<&'a [u8]> {
 ///     assert_eq!(range.end().as_slice_opt(), Some(b"bar".as_slice()));
 /// }
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OpenKeyRange<K> {
     /// All keys regardless of value
     AllKeys,

@@ -7,55 +7,158 @@ unmaintained = "deny"
 yanked = "deny"
 unsound = "deny"
 ignore = [
-    # Potential segfault in chrono crate, no workarounds
-    # Original error message:
-    #     ### Impact
-    #
-    #     Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
-    #
-    #     ### Workarounds
-    #
-    #     No workarounds are known.
-    #
-    #     ### References
-    #
-    #     - [time-rs/time#293](https://github.com/time-rs/time/issues/293)
-    "RUSTSEC-2020-0159",
-    # The same potential segfault in time crate.
-    # Original error message:
-    #      Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
-    #      The affected functions from time 0.2.7 through 0.2.22 are:
-    #
-    #      - `time::UtcOffset::local_offset_at`
-    #      - `time::UtcOffset::try_local_offset_at`
-    #      - `time::UtcOffset::current_local_offset`
-    #      - `time::UtcOffset::try_current_local_offset`
-    #      - `time::OffsetDateTime::now_local`
-    #      - `time::OffsetDateTime::try_now_local`
-    #
-    #      The affected functions in time 0.1 (all versions) are:
-    #
-    #      - `at`
-    #      - `at_utc`
-    #
-    #      Non-Unix targets (including Windows and wasm) are unaffected.
-    #
-    #      ### Patches
-    #
-    #      Pending a proper fix, the internal method that determines the local offset has been modified to always return `None` on the affected operating systems. This has the effect of returning an `Err` on the `try_*` methods and `UTC` on the non-`try_*` methods.
-    #
-    #      Users and library authors with time in their dependency tree should perform `cargo update`, which will pull in the updated, unaffected code.
-    #
-    #      Users of time 0.1 do not have a patch and should upgrade to an unaffected version: time 0.2.23 or greater or the 0.3. series.
-    #
-    #      ### Workarounds
-    #
-    #      No workarounds are known.
-    #
-    #      ### References
-    #
-    #      time-rs/time#293
-    "RUSTSEC-2020-0071",
+	# error[unmaintained]: mach is unmaintained
+	#    ┌─ /home/cornelius/projects/elastio/roxide/Cargo.lock:130:1
+	#    │
+	#130 │ mach 0.3.2 registry+https://github.com/rust-lang/crates.io-index
+	#    │ ---------------------------------------------------------------- unmaintained advisory detected
+	#    │
+	#    = ID: RUSTSEC-2020-0168
+	#    = Advisory: https://rustsec.org/advisories/RUSTSEC-2020-0168
+	#    = Last release was almost 4 years ago.
+	#
+	#      Maintainer(s) seem to be completely unreachable.
+	#
+	#      ## Possible Alternative(s)
+	#
+	#      These may or may not be suitable alternatives and have not been vetted in any way;
+	#      - [mach2](https://crates.io/crates/mach2) - direct fork
+	#    = Announcement: https://github.com/fitzgen/mach/issues/63
+	#    = Solution: No safe upgrade is available!
+	#    = mach v0.3.2
+	#      └── quanta v0.9.3
+	#          └── governor v0.5.1
+	#              └── cheburashka v4.4.7
+	#                  ├── elasyncio v3.1.0
+	#                  │   └── roxide v5.2.3-dev
+	#                  ├── roxide v5.2.3-dev (*)
+	#                  └── try-again v2.1.2
+	#                      └── roxide v5.2.3-dev (*)
+	#
+	"RUSTSEC-2020-0168",
+
+	# error[unsound]: Potential unaligned read
+	#   ┌─ /home/cornelius/projects/elastio/roxide/Cargo.lock:11:1
+	#   │
+	#11 │ atty 0.2.14 registry+https://github.com/rust-lang/crates.io-index
+	#   │ ----------------------------------------------------------------- unsound advisory detected
+	#   │
+	#   = ID: RUSTSEC-2021-0145
+	#   = Advisory: https://rustsec.org/advisories/RUSTSEC-2021-0145
+	#   = On windows, `atty` dereferences a potentially unaligned pointer.
+	#
+	#     In practice however, the pointer won't be unaligned unless a custom global allocator is used.
+	#
+	#     In particular, the `System` allocator on windows uses `HeapAlloc`, which guarantees a large enough alignment.
+	#
+	#     # atty is Unmaintained
+	#
+	#     A Pull Request with a fix has been provided over a year ago but the maintainer seems to be unreachable.
+	#
+	#     Last release of `atty` was almost 3 years ago.
+	#
+	#     ## Possible Alternative(s)
+	#
+	#     The below list has not been vetted in any way and may or may not contain alternatives;
+	#
+	#      - [is-terminal](https://crates.io/crates/is-terminal)
+	#      - std::io::IsTerminal *nightly-only experimental*
+	#   = Announcement: https://github.com/softprops/atty/issues/50
+	#   = Solution: No safe upgrade is available!
+	#   = atty v0.2.14
+	#     └── clap v2.34.0
+	#         └── structopt v0.3.26
+	#             └── cheburashka v4.4.7
+	#                 ├── elasyncio v3.1.0
+	#                 │   └── roxide v5.2.3-dev
+	#                 ├── roxide v5.2.3-dev (*)
+	#                 └── try-again v2.1.2
+	#                     └── roxide v5.2.3-dev (*)
+	"RUSTSEC-2021-0145",
+
+	#error[unsound]: const-cstr is Unmaintained
+	#   ┌─ /home/cornelius/projects/elastio/roxide/Cargo.lock:34:1
+	#   │
+	#34 │ const-cstr 0.3.0 registry+https://github.com/rust-lang/crates.io-index
+	#   │ ---------------------------------------------------------------------- unsound advisory detected
+	#   │
+	#   = ID: RUSTSEC-2023-0020
+	#   = Advisory: https://rustsec.org/advisories/RUSTSEC-2023-0020
+	#   = Last release was about five years ago.
+	#
+	#     The maintainer(s) have been unreachable to respond to any issues that may or may not include security issues.
+	#
+	#     The repository is now archived and there is no security policy in place to contact the maintainer(s) otherwise.
+	#
+	#     No direct fork exist.
+	#
+	#     # const-cstr is Unsound
+	#
+	#     The crate violates the safety contract of [ffi::CStr::from_bytes_with_nul_unchecked](https://doc.rust-lang.org/std/ffi/struct.CStr.html#method.from_bytes_with_nul_unchecked) used in `ConstCStr::as_cstr`
+	#
+	#     No interior nul bytes checking is done either by the constructor or the canonical macro to create the `ConstCStr`
+	#
+	#     # const-cstr Panic
+	#
+	#     Additionally the crate may cause runtime panics if statically compiled and ran with any untrusted data that is not nul-terminated.
+	#
+	#     This is however unlikely but the the crate should not be used for untrusted data in context where panic may create a DoS vector.
+	#
+	#     ## Possible Alternatives
+	#
+	#     The below may or may not provide alternative(s)
+	#
+	#     - [const_str::cstr!](https://docs.rs/const-str/latest/const_str/macro.cstr.html)
+	#     - [cstr::cstr!](https://crates.io/crates/cstr)
+	#   = Announcement: https://github.com/abonander/const-cstr
+	#   = Solution: No safe upgrade is available!
+	#   = const-cstr v0.3.0
+	#     └── (dev) roxide-librocksdb-sys v5.2.3-dev
+	#         ├── roxide v5.2.3-dev
+	#         └── roxide-rocksdb v5.2.3-dev
+	#             └── roxide v5.2.3-dev (*)
+	"RUSTSEC-2023-0020",
+
+	#error[unmaintained]: ansi_term is Unmaintained
+	#  ┌─ /home/cornelius/projects/elastio/roxide/Cargo.lock:6:1
+	#  │
+	#6 │ ansi_term 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+	#  │ ---------------------------------------------------------------------- unmaintained advisory detected
+	#  │
+	#  = ID: RUSTSEC-2021-0139
+	#  = Advisory: https://rustsec.org/advisories/RUSTSEC-2021-0139
+	#  = The maintainer has advised that this crate is deprecated and will not receive any maintenance.
+	#
+	#    The crate does not seem to have much dependencies and may or may not be ok to use as-is.
+	#
+	#    Last release seems to have been three years ago.
+	#
+	#    ## Possible Alternative(s)
+	#
+	#     The below list has not been vetted in any way and may or may not contain alternatives;
+	#
+	#     - [anstyle](https://github.com/epage/anstyle)
+	#     - [console](https://crates.io/crates/console)
+	#     - [nu-ansi-term](https://crates.io/crates/nu-ansi-term)
+	#     - [owo-colors](https://crates.io/crates/owo-colors)
+	#     - [stylish](https://crates.io/crates/stylish)
+	#     - [yansi](https://crates.io/crates/yansi)
+	#
+	#    ## Dependency Specific Migration(s)
+	#
+	#     - [structopt, clap2](https://github.com/clap-rs/clap/discussions/4172)
+	#  = Announcement: https://github.com/ogham/rust-ansi-term/issues/72
+	#  = Solution: No safe upgrade is available!
+	#  = ansi_term v0.12.1
+	#    └── clap v2.34.0
+	#        └── structopt v0.3.26
+	#            └── cheburashka v4.4.7
+	#                ├── elasyncio v3.1.0
+	#                │   └── roxide v5.2.3-dev
+	#                ├── roxide v5.2.3-dev (*)
+	#                └── try-again v2.1.2
+	#                    └── roxide v5.2.3-dev (*)
+	"RUSTSEC-2021-0139",
 ]
 
 # The lint level for crates with security notices. Note that as of
@@ -74,27 +177,46 @@ wildcards = "allow"
 multiple-versions = "deny"
 # FIXME: deduplicate dependencies
 skip = [
-    # That's dependence of clap v2.33.3. Need wait for update
-    { name = "strsim", version = "=0.8" },
-    # `config` and `nom` crates use the old version of this crate
-    { name = "arrayvec", version = "0.5.2" },
-    # { name = "crate_name_here", version = "=0.11.0" },
+	# That's dependence of clap v2.33.3. Need wait for update
+	{ name = "strsim", version = "=0.8" },
+	# `config` and `nom` crates use the old version of this crate
+	{ name = "arrayvec", version = "0.5.2" },
+	# { name = "crate_name_here", version = "=0.11.0" },
 
-    { name = "parking_lot", version = "=0.11.2" },
-    { name = "parking_lot_core", version = "=0.8.5" },
+	# Older version comes from `getrandom`
+	{ name = "wasi", version = "=0.10.2" },
 
-    # Older version comes from `getrandom`
-    { name = "wasi", version = "=0.10.2" },
+	# dashmap duplicate deps are pulled in by cheburashka, grr
+	{ name = "dashmap", version = "4.*" },
 
-		# dashmap duplicate deps are pulled in by cheburashka, grr
-    { name = "dashmap", version = "4.*" },
+	# also cheburashka
+	{ name = "redox_syscall", version = "0.2" },
+	{ name = "hermit-abi", version = "0.1" },
+	{ name = "heck", version = "0.3" },
+	{ name = "base64", version = "0.13" },
+	{ name = "regex-syntax", version = "0.6" },
+
+	# via config, transitive dep via try-again
+	{ name = "nom", version = "5" },
+	{ name = "darling", version = "0.13" },
+	{ name = "darling_core", version = "0.13" },
+	{ name = "darling_macro", version = "0.13" },
+
+	# the cpp macro still uses this old version
+	{ name = "aho-corasick", version = "0.7" },
+
 ]
 # Skips the entire tree of the crate dependencies:
 skip-tree = [
-    # { name = "crate_name_here", version = "=0.11.0", depth = 20 },
+	# { name = "crate_name_here", version = "=0.11.0", depth = 20 },
 
-    # Cheburashka 2 again
-    { name = "pin-project", version = "0.4.*", depth = 20 },
+	# Cheburashka 2 again
+	{ name = "pin-project", version = "0.4.*", depth = 20 },
+
+	# Older version comes from `cheburashka` transitive deps
+	{ name = "windows-sys", version = "0.42", depth = 20 },
+	{ name = "windows-sys", version = "0.45", depth = 20 },
+	{ name = "rustix", version = "0.36", depth = 20 },
 ]
 deny = []
 
@@ -102,11 +224,10 @@ deny = []
 unknown-registry = "warn"
 unknown-git = "deny"
 allow-registry = [
-    "https://github.com/rust-lang/crates.io-index",
-    "https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git",
+	"https://github.com/rust-lang/crates.io-index",
+	"https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git",
 ]
-allow-git = [
-]
+allow-git = []
 
 [licenses]
 unlicensed = "deny"
@@ -115,27 +236,15 @@ private = { ignore = true }
 
 # run `cargo deny list` to see which crates use which license
 allow = [
-    "MIT",
-    "BSD-3-Clause",
-    "BSD-2-Clause",
-    "Unlicense",
-    "Apache-2.0",
-    "CC0-1.0",
-    "Zlib",
-    "ISC",
-    "OpenSSL",
-    # (c) @anelson:
-    # I'm okay with it (MPL-2.0 license) because of this:
-    #
-    # > However, a larger work using the licensed work may be distributed under
-    # > different terms and without source code for files added in the larger work.
-    #
-    # So if we modify this crate's code, we must release that code, which is why
-    # it's "copyleft".
-    # But that copyleft license doesn't contaminate the rest of the code that
-    # just links with the MPL code. So we can add MPL 2 to the approved license list
-    "MPL-2.0",
-		"Unicode-DFS-2016"
+	"MIT",
+	"BSD-3-Clause",
+	"BSD-2-Clause",
+	"Unlicense",
+	"Apache-2.0",
+	"CC0-1.0",
+	"Zlib",
+	"ISC",
+	"Unicode-DFS-2016",
 ]
 deny = []
 default = "deny"
@@ -151,8 +260,8 @@ version = "0.3.2"
 # https://bitbucket.org/marshallpierce/stream-vbyte-rust/src/master/LICENSE.txt
 expression = "Unlicense"
 license-files = [
-    # license file hash was taken from the error message
-    { path = "LICENSE.txt", hash = 0x508d93ea }
+	# license file hash was taken from the error message
+	{ path = "LICENSE.txt", hash = 0x508d93ea },
 ]
 
 [[licenses.clarify]]
@@ -162,9 +271,7 @@ license-files = [
 name = "webpki"
 version = "0.21.3"
 expression = "ISC"
-license-files = [
-    { path = "LICENSE", hash = 0x001c7e6c }
-]
+license-files = [{ path = "LICENSE", hash = 0x001c7e6c }]
 
 [[licenses.clarify]]
 name = "ring"
@@ -174,15 +281,11 @@ version = "0.16.15"
 # The issue under ring repo:
 # https://github.com/briansmith/ring/issues/902
 expression = "ISC AND MIT AND OpenSSL"
-license-files = [
-    { path = "LICENSE", hash = 0xbd0eed23 },
-]
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
 # Copied from https://github.com/hsivonen/encoding_rs/blob/b73366a/README.md#licensing
 [[licenses.clarify]]
 name = "encoding_rs"
 version = "*"
 expression = "(Apache-2.0 OR MIT) AND BSD-3-Clause"
-license-files = [
-    { path = "COPYRIGHT", hash = 0x39f8ad31 }
-]
+license-files = [{ path = "COPYRIGHT", hash = 0x39f8ad31 }]

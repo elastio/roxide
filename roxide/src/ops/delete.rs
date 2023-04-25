@@ -853,7 +853,7 @@ mod test {
         db.put(cf, &key, b"value!", None)?;
         db.delete(cf, &key, None)?;
 
-        assert_eq!(None, db.get(cf, &key, None)?);
+        assert_eq!(None, db.get(cf, key, None)?);
 
         Ok(())
     }
@@ -865,7 +865,7 @@ mod test {
         let mut keys = random_keys(1000);
 
         for key in &keys {
-            db.put(cf, &key, b"foo", None)?;
+            db.put(cf, key, b"foo", None)?;
         }
 
         keys.sort();
@@ -907,7 +907,7 @@ mod test {
         for (idx, key) in lower_half.iter().enumerate() {
             assert_eq!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "lower_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -917,7 +917,7 @@ mod test {
         for (idx, key) in upper_half.iter().enumerate() {
             assert_ne!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "upper_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -930,7 +930,7 @@ mod test {
         for (idx, key) in lower_half.iter().enumerate() {
             assert_eq!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "lower_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -940,7 +940,7 @@ mod test {
         for (idx, key) in upper_half.iter().enumerate() {
             assert_eq!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "upper_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -957,7 +957,7 @@ mod test {
         let mut keys = random_keys(1000);
 
         for key in &keys {
-            db.put(cf, &key, b"foo", None)?;
+            db.put(cf, key, b"foo", None)?;
         }
 
         keys.sort();
@@ -985,7 +985,7 @@ mod test {
         for (idx, key) in lower_half.iter().enumerate() {
             assert_eq!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "lower_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -995,7 +995,7 @@ mod test {
         for (idx, key) in upper_half.iter().enumerate() {
             assert_ne!(
                 None,
-                db.get(cf, &key, None)?,
+                db.get(cf, key, None)?,
                 "upper_half[{}] = {}",
                 idx,
                 hex::encode(key.as_slice())
@@ -1051,13 +1051,13 @@ mod test {
         let keys = random_keys(1000);
 
         for key in &keys {
-            tx.put(&cf, &key, b"foo", None)?;
+            tx.put(&cf, key, b"foo", None)?;
         }
 
         tx.multi_delete(&cf, &keys, None)?;
 
         for key in &keys {
-            assert_eq!(None, db.get(&cf, &key, None)?);
+            assert_eq!(None, db.get(&cf, key, None)?);
         }
 
         Ok(())
@@ -1073,13 +1073,13 @@ mod test {
         let keys = random_keys(1000);
 
         for key in &keys {
-            tx.put(&cf, &key, b"foo", None)?;
+            tx.put(&cf, key, b"foo", None)?;
         }
 
         tx.multi_delete(&cf, &keys, None)?;
 
         for key in &keys {
-            assert_eq!(None, db.get(&cf, &key, None)?);
+            assert_eq!(None, db.get(&cf, key, None)?);
         }
 
         Ok(())
@@ -1111,7 +1111,7 @@ mod test {
         let keys = random_keys(1000);
 
         for key in &keys {
-            db.put(&cf, &key, b"foo", None)?;
+            db.put(&cf, key, b"foo", None)?;
         }
 
         let batch = WriteBatch::new()?;
@@ -1119,7 +1119,7 @@ mod test {
         db.write(batch, None)?;
 
         for key in &keys {
-            assert_eq!(None, db.get(&cf, &key, None)?);
+            assert_eq!(None, db.get(&cf, key, None)?);
         }
 
         Ok(())

@@ -750,7 +750,7 @@ mod test {
 
         // Now again but in reverse order
         let mut iter = db.iterate_range(&cf, None, (&b"foo0"[..], &b"foo5"[..]))?;
-        iter.from_key_reverse(&b"foo5");
+        iter.from_key_reverse(b"foo5");
         let iterated_pairs = iter_to_vec(iter)?;
 
         // as above there is no `foo5`, so the first key before `foo5` in lexicographical order

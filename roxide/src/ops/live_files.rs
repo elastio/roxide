@@ -11,7 +11,7 @@ use crate::ops::get_db_ptr::GetDbPtr;
 use crate::Result;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SstFile {
     /// The name of the column family this file belongs to
     pub column_family_name: String,

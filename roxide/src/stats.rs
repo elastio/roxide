@@ -62,7 +62,7 @@ impl fmt::Display for HistogramData {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize, Eq)]
 pub struct TickerData {
     pub id: TickerId,
     pub name: &'static str,

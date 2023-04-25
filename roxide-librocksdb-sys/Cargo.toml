@@ -2,38 +2,52 @@
 name = "roxide-librocksdb-sys"
 version = "5.2.3-dev"
 edition = "2021"
-authors = ["Karl Hobley <karlhobley10@gmail.com>", "Arkadiy Paronyan <arkadiy@ethcore.io>", "Adam Nelson <adam@elastio.com>"]
+authors = [
+	"Karl Hobley <karlhobley10@gmail.com>",
+	"Arkadiy Paronyan <arkadiy@ethcore.io>",
+	"Adam Nelson <adam@elastio.com>",
+]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 description = "Elastio's fork of `librocksdb-sys` used in support of our `roxide` RocksDB wrapper"
 readme = "README.md"
 repository = "https://github.com/elastio/roxide"
-keywords = [ "bindings", "ffi", "rocksdb" ]
-categories = [ "api-bindings", "database", "external-ffi-bindings" ]
+keywords = ["bindings", "ffi", "rocksdb"]
+categories = ["api-bindings", "database", "external-ffi-bindings"]
 links = "rocksdb"
 publish = ["elastio-private"]
 
 [features]
-default = [ "static" ]
+default = ["static"]
 static = []
 snappy = []
 lz4 = []
 zstd = []
 zlib = []
 bzip2 = []
+# TODO: if building folly is ever made reliable, it should be enabled when io_uring is
+# without folly, Rocks will compile fine with io uring enabled but it won't actually do async IO
+#io_uring = ["folly"]
+io_uring = []
+# TODO: re-enable this once it's actually working reliably.  If ever.
+# folly = ["duct", "pkg-config"]
 
 # Enable jemalloc support in RocksDB
 jemalloc = ["jemalloc-sys"]
 
 [dependencies]
-jemalloc-sys = { version = "0.3", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
+jemalloc-sys = { version = "0.5", optional = true, features = [
+	"unprefixed_malloc_on_supported_platforms",
+] }
 libc = "0.2"
 
 [dev-dependencies]
 const-cstr = "0.3"
-uuid = { version = "0.8", features = ["v4"] }
+uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
+bindgen = { version = "0.65", default-features = false, features = ["runtime"] }
 cc = { version = "1.0", features = ["parallel"] }
-bindgen = { version = "0.58", default-features = false, features = ["runtime"] }
-glob = "0.3"
+duct = { version = "0.13.6", optional = true }
 dunce = "1"
+glob = "0.3"
+pkg-config = { version = "0.3", optional = true }

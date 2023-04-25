@@ -314,7 +314,7 @@ unsafe impl Sync for Checkpoint {}
 
 #[cfg(test)]
 mod test {
-    #![allow(clippy::blacklisted_name)]
+    #![allow(clippy::disallowed_names)]
     use super::*;
     use crate::ops::{
         Compact, CreateCheckpoint, DbOpen, DbOpenReadOnly, Flush, Get, GetLatestSequenceNumber,

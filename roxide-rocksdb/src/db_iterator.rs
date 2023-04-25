@@ -530,6 +530,10 @@ impl Iterator for DBWALIterator {
 
     fn next(&mut self) -> Option<(u64, WriteBatch)> {
         // Seek to the next write batch.
+        if !self.valid() {
+            return None;
+        }
+
         unsafe {
             ffi::rocksdb_wal_iter_next(self.inner);
         }

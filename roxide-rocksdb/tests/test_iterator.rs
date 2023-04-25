@@ -246,7 +246,7 @@ fn test_prefix_iterator_uses_full_prefix() {
 
         let prefix = [0, 1, 1];
         let results: Vec<_> = db
-            .prefix_iterator(&prefix)
+            .prefix_iterator(prefix)
             .map(|(_, v)| std::str::from_utf8(&v).unwrap().to_string())
             .collect();
 

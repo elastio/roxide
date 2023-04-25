@@ -81,6 +81,11 @@ fn build_rocksdb() {
         "rocksdb/third-party/gtest-1.8.1/fused-src/".into(),
     ];
 
+    #[cfg(feature = "folly")]
+    if env::var("TARGET").unwrap().contains("linux") {
+        build_folly(&mut config);
+    }
+
     if cfg!(feature = "snappy") {
         add_define(&mut config, &mut defines, "SNAPPY", "1");
         include_paths.push("snappy/".into());
@@ -179,6 +184,74 @@ fn build_rocksdb() {
         add_define(&mut config, &mut defines, "OS_LINUX", None);
         add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
         add_define(&mut config, &mut defines, "ROCKSDB_LIB_IO_POSIX", None);
+
+        // See elsehwere `build_io_uring` where we build liburing from source.  This will
+        // statically link liburing.  According to the liburing docs, newer liburing can run
+        // against older kernel versions, although newer kernel uring features are obviously not
+        // available in that case.
+        if cfg!(feature = "io_uring") {
+            add_define(&mut config, &mut defines, "ROCKSDB_IOURING_PRESENT", None);
+            println!("cargo:rustc-link-lib=static=uring");
+        }
+
+        if cfg!(feature = "folly") {
+            // If the use of the facebook open source library "folly" is enabled, then we can use
+            // coroutines for async support.
+            add_define(&mut config, &mut defines, "USE_COROUTINES", None);
+            config.flag_if_supported("-fcoroutines");
+
+            // folly sucks so much that on most distros there isn't an official package for it.
+            // you're meant to build it from source.  On our Github Actions builds, running the
+            // latest Ubuntu, we have to build a specific old version compatible with the older
+            // kernel that Ubuntu 22.04 runs.  We need a way to find the folly library and include
+            // files.  The hack is to set env vars.
+            //
+            // But at least on Fedora, there is a `folly` OS package, and that's so much more
+            // convenient that we want to support that do.  So setting this env var isn't required.
+            //if let Ok(folly_install_dir) = std::env::var_os("FOLLY_INSTALL_DIR") {
+            //    include_paths.push(PathBuf::from(folly_install_dir).join("include"));
+            //    println!("cargo:rustc-link-search=native={}", folly_install_dir);
+            //}
+
+            // linked.  `folly` in turn requires other deps including boost.
+            //
+            // Sadly all of deps are such insanely complex C++ projects there's no way to vendor
+            // them, they must be installed as shared libraries
+            println!("cargo:rustc-link-lib=folly");
+            println!("cargo:rustc-link-lib=boost_context");
+            println!("cargo:rustc-link-lib=glog");
+        }
+
+        // The following are detected dynamically in the CMakeLists.txt file in the official
+        // RocksDB build.  We dont' have access to cmake so we just assume these are present
+        // because we've made them a required part of our build environment on Linux.
+
+        add_define(&mut config, &mut defines, "ROCKSDB_FALLOCATE_PRESENT", None);
+        add_define(&mut config, &mut defines, "ROCKSDB_RANGESYNC_PRESENT", None);
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_PTHREAD_ADAPTIVE_MUTEX",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_MALLOC_USABLE_SIZE",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_SCHED_GETCPU_PRESENT",
+            None,
+        );
+        add_define(
+            &mut config,
+            &mut defines,
+            "ROCKSDB_AUXV_GETAUXVAL_PRESENT",
+            None,
+        );
     } else if target.contains("freebsd") {
         add_define(&mut config, &mut defines, "OS_FREEBSD", None);
         add_define(&mut config, &mut defines, "ROCKSDB_PLATFORM_POSIX", None);
@@ -366,6 +439,237 @@ fn build_rocksdb() {
     config.compile("librocksdb.a");
 }
 
+/// Build the Folly library from the git submodule that's embedded in this crate.
+///
+/// NOTE: this currently doesn't work reliably.  Getting `folly` and its deps to build and link has
+/// proven to be too hard for me to implement.  I've left this here because the code as is does
+/// solve a number of nasty problems that came up, but it still doesn't work right.
+///
+/// Presently I can't find a way to get the include path for compiling the rocksdb C++ files to
+/// point to the `fmt` library version that the folly build script downloads and builds from
+/// source.  Maybe a better programmer than I can figure it out.  What follows is the doc comment
+/// for this function if you assume the function actually works.
+///
+/// Folly is a hot mess, a total shit show and a perfect example of what happens when you let C++
+/// developers build a framework without any supervision.  Nothing of what you would expect from a
+/// modern software library applies to Folly.  It's not installed anywhere, it's not distributed as
+/// an OS package, it works with third-party dependencies that need to be downloaded and installed
+/// with a specific script.
+///
+/// Unless you're trying to fix a problem with folly compilation on your system, ignore this
+/// function and pretend you didn't see it.  If you *are* trying to figure out why this doens't
+/// work on your system, then you have my sympathies.  Make absolutely sure you really need that
+/// io_uring support; maybe you don't and you can avoid this by not enabling the `io_uring` feature
+/// which in turn requires folly.  If not, well, godspeed you poor bastard!
+#[cfg(feature = "folly")]
+fn build_folly(config: &mut cc::Build) {
+    use duct::cmd;
+    use std::io::BufRead;
+    use std::path::Path;
+
+    /// USe the `pkg-config` crate to read a pkg-config file and look up the pkg config for the
+    /// specified package
+    ///
+    /// Unfortunately the only way we have to direct pkgconfig to the scratch path where folly's
+    /// build script writes the pkg-config file is via fucking with env vars
+    fn pkg_config(pkg_config_path: &Path, package: &str) -> pkg_config::Library {
+        let old_pkgconfig_path = env::var("PKG_CONFIG_PATH").ok();
+        env::set_var("PKG_CONFIG_PATH", pkg_config_path);
+        let library = pkg_config::Config::new()
+            .statik(true)
+            .probe(package)
+            .unwrap();
+        env::set_var(
+            "PKG_CONFIG_PATH",
+            old_pkgconfig_path.as_deref().unwrap_or(""),
+        );
+
+        library
+    }
+
+    /// pkg-config prints the output that will let cargo link to the requested library, and all of
+    /// it's dependent libs, however for some reason pkg-config doesn't automatically do that for
+    /// include paths.
+    ///
+    /// This issue https://github.com/rust-lang/pkg-config-rs/issues/43 from 2017 is still open; I
+    /// assume it's just not something the Rust team cares about.
+    fn set_include_and_defines(config: &mut cc::Build, library: pkg_config::Library) {
+        for include_path in library.include_paths {
+            config.include(include_path);
+        }
+
+        for (name, value) in library.defines {
+            config.define(&name, value.as_deref());
+        }
+    }
+
+    /// Run a duct command, streaming stdout and stderr to the parent process but with the
+    /// a distinctive prefix to make it clear where it comes from
+    fn run_duct_command(command: duct::Expression) {
+        let reader = command
+            .stderr_to_stdout()
+            .reader()
+            .expect("Failed to start command");
+
+        let reader = std::io::BufReader::new(reader);
+        for lin in reader.lines() {
+            println!("build_folly: {}", lin.unwrap());
+        }
+
+        // NOTE: duct's reader will automatically call `wait` at EOF and return an I/O error if the
+        // process doesn't termiante correctly, so no need for further error handling
+    }
+
+    let folly_root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("folly");
+    let scratch_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("folly-scratch");
+    let actual_lib_path = scratch_path.join("installed/folly/lib");
+    let pkg_config_path = actual_lib_path.join("pkgconfig");
+
+    // Only invoke this crap if folly isn't present (or if an env var is set to force re-running
+    // this logic which greatly speeds up debugging)
+    if !pkg_config_path.exists() && env::var("ROXIDE_FOLLY_FORCE_BUILD").is_ok() {
+        // Make sure the deps that folly needs are installed.
+        //
+        // Folly is shit, so this wont' actually literally install all necessary deps.  It also
+        // requires some deps that are assumed to be present.  Look at the ci.yml file to see what
+        // Ubuntu packages are installed prior to building, for the latest on what packages need to be
+        // present first
+        //
+        // Because this installs system packages, it needs to run as root.  What's that, you don't like
+        // that a build.rs script runs `sudo`?  Well then you should have stuck to building Electron
+        // apps in Typescript.
+        println!(
+            "cargo:warning=Installing folly dependencies (this may require your sudo password)"
+        );
+        run_duct_command(
+            cmd!(
+                "sudo",
+                "./build/fbcode_builder/getdeps.py",
+                "install-system-deps",
+                "--recursive"
+            )
+            .dir(&folly_root),
+        );
+
+        // Now compile folly itself, using the out dir for the "scratch" dir.
+        println!("Building folly from source");
+        // FUCK: I think it's using the `fmt` library installed on the system and not the one it
+        // downloaded.  FML.  How do I control the include path order??
+        run_duct_command(
+            cmd!(
+                "python3",
+                "./build/fbcode_builder/getdeps.py",
+                "build",
+                "--allow-system-packages",
+                "--no-tests",
+                // This little gem courtsey of https://github.com/facebook/folly/issues/1780
+                r#"--extra-cmake-defines={"CMAKE_CXX_FLAGS": "-fPIC"}"#,
+                "--scratch-path",
+                &scratch_path
+            )
+            .dir(&folly_root),
+        );
+    }
+
+    // Use the pkgconfig support to pull in the header files and libs as needed
+    let library = pkg_config(&pkg_config_path, "libfolly");
+    set_include_and_defines(config, library);
+
+    // For unknown reasons, the cmake incantation in folly that produces the libfolly.pc pkgconfig
+    // file is broken, and uses `lib64` instead of the actual `lib` where `libfolly.a` is written.
+    // Rather than fuck around trying to fix this, just hack another workaround in here.
+    // Everything about support for folly is ugly hacks and shit, so who will notice a little more?
+    println!(
+        "cargo:rustc-link-search=native={}",
+        actual_lib_path.display()
+    );
+
+    // The pkgconfig entry for libfolly is stupid in another way: among the many include paths it
+    // specifies, it forgets the include path for `fmt`, `gflag`, and probably others.  This leads
+    // to compile errors if the system where the build runs doesn't have fmt installed, or even
+    // worse, if the system has a distro package version of fmt installed but it's an incompatible
+    // version.  Total amateur hours here.
+    //
+    // So add to the pile of bullshit hacks, and scan in the `installed/*-*` directories looking
+    // for pkgconfig files.  Assume at least that the folly python build script is at least smart
+    // enough to not download and compile anything that folly doesn't need.
+    for (lib_path_frag, pkgconfig_package_name) in
+        &[("fmt", "fmt"), ("glog", "libglog"), ("gflags", "gflags")]
+    {
+        let pattern = format!("{}/installed/{lib_path_frag}-*", scratch_path.display());
+        for path_result in glob::glob(&pattern).unwrap() {
+            let path = path_result.unwrap();
+            if path.is_dir() {
+                println!(
+                    "Found a folly dependent lib '{lib_path_frag}' in {}",
+                    path.display()
+                );
+
+                // THere seems to be no rhyme or reason to whether a given library uses `lib` or
+                // `lib64`.  They're all 64-bit code.
+                let mut pkg_config_path: Option<PathBuf> = None;
+
+                for lib_bullshit in &["lib", "lib64"] {
+                    let path = path.join(lib_bullshit).join("pkgconfig");
+                    if path.is_dir() {
+                        pkg_config_path = Some(path);
+                        break;
+                    }
+                }
+
+                let pkg_config_path = pkg_config_path
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("No pkgconfig path found for {}", lib_path_frag));
+
+                println!(
+                    "Looking for package '{pkgconfig_package_name}' file in {}",
+                    pkg_config_path.display()
+                );
+
+                let library = pkg_config(pkg_config_path, pkgconfig_package_name);
+                set_include_and_defines(config, library);
+            }
+        }
+    }
+
+    // The folly code is so incredibly sloppy that the headers throw up a ton of warnings.
+    // Suppress those so we can troubleshoot legit warnings
+    config.flag_if_supported("-Wno-deprecated");
+
+    println!("Folly has been built from source.  We'll find out later if it links cleanly or not");
+}
+
+fn build_io_uring() {
+    let mut config = cc::Build::new();
+
+    config.include("liburing/src/include");
+    config.include(".");
+    config.define("LIBURING_INTERNAL", None);
+    config.define("_GNU_SOURCE", None);
+
+    // The following defines taken from `config-host.h`, which is produced by running `./configure`
+    // in the `liburing` root.
+    config.define("CONFIG_HAVE_KERNEL_RWF_T", None);
+    config.define("CONFIG_HAVE_KERNEL_TIMESPEC", None);
+    config.define("CONFIG_HAVE_OPEN_HOW", None);
+    config.define("CONFIG_HAVE_STATX", None);
+    config.define("CONFIG_HAVE_GLIBC_STATX", None);
+    config.define("CONFIG_HAVE_CXX", None);
+    config.define("CONFIG_HAVE_UCONTEXT", None);
+    config.define("CONFIG_HAVE_STRINGOP_OVERFLOW", None);
+    config.define("CONFIG_HAVE_ARRAY_BOUNDS", None);
+    config.define("CONFIG_HAVE_NVME_URING", None);
+
+    // End defines from config-host.h
+
+    config.flag_if_supported("-Wno-stack-protector");
+
+    for file in ["setup.c", "queue.c", "register.c", "syscall.c"] {
+        config.file(format!("liburing/src/{file}"));
+    }
+    config.compile("uring"); // produces liburing.a
+}
+
 fn build_snappy() {
     let target = env::var("TARGET").unwrap();
     let endianness = env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
@@ -375,6 +679,9 @@ fn build_snappy() {
     config.include(".");
     config.define("NDEBUG", Some("1"));
     config.extra_warnings(false);
+
+    // Snappy doesn't compile cleanly without this warning being suppressed.  Nice work guys.
+    config.flag_if_supported("-Wno-sign-compare");
 
     if target.contains("msvc") {
         config.flag("-EHsc");
@@ -426,6 +733,7 @@ fn build_zstd() {
         "zstd/lib/common/*.c",
         "zstd/lib/compress/*.c",
         "zstd/lib/decompress/*.c",
+        "zstd/lib/decompress/*.S",
         "zstd/lib/dictBuilder/*.c",
         "zstd/lib/legacy/*.c",
     ];
@@ -446,9 +754,9 @@ fn build_zstd() {
     // so we can be used with another zstd-linking lib.
     // See https://github.com/gyscos/zstd-rs/issues/58
     compiler.flag("-fvisibility=hidden");
-    compiler.define("ZSTDLIB_VISIBILITY", Some(""));
-    compiler.define("ZDICTLIB_VISIBILITY", Some(""));
-    compiler.define("ZSTDERRORLIB_VISIBILITY", Some(""));
+    compiler.define("ZSTDLIB_VISIBLE", Some(""));
+    compiler.define("ZDICTLIB_VISIBLE", Some(""));
+    compiler.define("ZSTDERRORLIB_VISIBLE", Some(""));
 
     // Force the XXHash code to prefix its symbols so that they don't collide with the identical
     // xxhash code in the lz4 libary
@@ -517,7 +825,7 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
 }
 
 fn cxx_standard() -> String {
-    env::var("ROCKSDB_CXX_STD").map_or("-std=c++17".to_owned(), |cxx_std| {
+    env::var("ROCKSDB_CXX_STD").map_or("-std=c++20".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
             format!("-std={}", cxx_std)
         } else {
@@ -541,6 +849,11 @@ fn main() {
         } else if target.contains("linux") {
             println!("cargo:rustc-link-lib=dylib=stdc++");
         }
+    }
+    if cfg!(feature = "io_uring") && !try_to_find_and_link_lib("LIBURING") {
+        println!("cargo:rerun-if-changed=liburing/");
+        fail_on_empty_directory("liburing");
+        build_io_uring();
     }
     if cfg!(feature = "snappy") && !try_to_find_and_link_lib("SNAPPY") {
         println!("cargo:rerun-if-changed=snappy/");

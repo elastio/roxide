@@ -22,7 +22,7 @@ cpp! {{
 /// The possible error codes.
 ///
 /// Copy/pasted from the C++ code in `include/rocksdb/status.h`
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
 #[repr(u8)]
 pub enum Code {
     Ok = 0,
@@ -46,7 +46,7 @@ pub enum Code {
 /// The possible error sub-codes.
 ///
 /// Copy/pasted from the C++ code in `include/rocksdb/status.h`
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
 #[repr(u8)]
 pub enum SubCode {
     None = 0,
@@ -66,7 +66,7 @@ pub enum SubCode {
 ///
 /// Copy/pasted from the C++ code in `include/rocksdb/status.h`
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
 #[repr(u8)]
 pub enum Severity {
     NoError = 0,
@@ -76,7 +76,7 @@ pub enum Severity {
     UnrecoverableError = 4,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub struct Status {
     pub(crate) code: Code,
     pub(crate) subcode: SubCode,
@@ -89,7 +89,7 @@ pub struct Status {
 /// This has the same layout as the `CppStatus` struct in `status.h`.  It's how status information
 /// is passed between C++ and Rust code without an excess of hassle.
 #[repr(C)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 #[doc(hidden)] // this is only `pub` so it can be used with C++
 pub struct CppStatus {
     code: Code,
