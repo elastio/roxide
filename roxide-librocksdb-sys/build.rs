@@ -86,7 +86,7 @@ fn build_rocksdb() {
         build_folly(&mut config);
     }
 
-    if cfg!(feature = "io_uring") {
+    if cfg!(all(target_os = "linux", feature = "io_uring")) {
         include_paths.push("liburing/src/include/".into());
     }
 
@@ -643,6 +643,7 @@ fn build_folly(config: &mut cc::Build) {
     println!("Folly has been built from source.  We'll find out later if it links cleanly or not");
 }
 
+#[cfg(target_os = "linux")]
 fn build_io_uring() {
     let mut config = cc::Build::new();
 
@@ -665,6 +666,9 @@ fn build_io_uring() {
     }
     config.compile("uring"); // produces liburing.a
 }
+
+#[cfg(not(target_os = "linux"))]
+fn build_io_uring() {}
 
 fn build_snappy() {
     let target = env::var("TARGET").unwrap();
