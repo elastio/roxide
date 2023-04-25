@@ -79,7 +79,7 @@ jobs:
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
         # TODO: run this last
-      - run: tree
+      - run: tree || echo "There is no tree"
       # Run clippy with default features, and also with all features
       - run: cargo clippy --workspace --all-targets --all-features
 
