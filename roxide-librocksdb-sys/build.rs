@@ -647,7 +647,7 @@ fn build_io_uring() {
     let mut config = cc::Build::new();
 
     config.include("liburing/src/include");
-    config.include(".");
+    config.include("liburing");
     config.define("LIBURING_INTERNAL", None);
     config.define("_GNU_SOURCE", None);
 

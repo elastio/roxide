@@ -80,12 +80,9 @@ jobs:
 
       - run: cargo fmt --all -- --check
       - run: cargo doc --workspace --no-deps
-      # Run clippy with default features, and also with all features
-      - run: cargo clippy --workspace --all-targets
 
-      # NB: can't lint `all-features` here because that includes the io_uring feature which won't compile
-      # without the nasty C++ monstrosity folly.  So this happens in `rust-test` instead, where folly is already built
-      # - run: cargo clippy --workspace --all-targets --all-features
+      # Run clippy with default features, and also with all features
+      - run: cargo clippy --workspace --all-targets --all-features
 
   rust-test:
     runs-on: ${{ matrix.os }}
