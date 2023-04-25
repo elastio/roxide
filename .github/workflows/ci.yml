@@ -78,11 +78,13 @@ jobs:
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
-      - run: cargo fmt --all -- --check
-      - run: cargo doc --workspace --no-deps
-
+        # TODO: run this last
+      - run: tree
       # Run clippy with default features, and also with all features
       - run: cargo clippy --workspace --all-targets --all-features
+
+      - run: cargo fmt --all -- --check
+      - run: cargo doc --workspace --no-deps
 
   rust-test:
     runs-on: ${{ matrix.os }}
