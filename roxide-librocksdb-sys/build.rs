@@ -86,7 +86,7 @@ fn build_rocksdb() {
         build_folly(&mut config);
     }
 
-    if cfg!(feature = "io_uring") {
+    if cfg!(all(target_os = "linux", feature = "io_uring")) {
         include_paths.push("liburing/src/include/".into());
     }
 
@@ -643,28 +643,21 @@ fn build_folly(config: &mut cc::Build) {
     println!("Folly has been built from source.  We'll find out later if it links cleanly or not");
 }
 
+#[cfg(target_os = "linux")]
 fn build_io_uring() {
     let mut config = cc::Build::new();
 
     config.include("liburing/src/include");
-    config.include(".");
+    config.include("liburing");
     config.define("LIBURING_INTERNAL", None);
     config.define("_GNU_SOURCE", None);
 
-    // The following defines taken from `config-host.h`, which is produced by running `./configure`
-    // in the `liburing` root.
-    config.define("CONFIG_HAVE_KERNEL_RWF_T", None);
-    config.define("CONFIG_HAVE_KERNEL_TIMESPEC", None);
-    config.define("CONFIG_HAVE_OPEN_HOW", None);
-    config.define("CONFIG_HAVE_STATX", None);
-    config.define("CONFIG_HAVE_GLIBC_STATX", None);
-    config.define("CONFIG_HAVE_CXX", None);
-    config.define("CONFIG_HAVE_UCONTEXT", None);
-    config.define("CONFIG_HAVE_STRINGOP_OVERFLOW", None);
-    config.define("CONFIG_HAVE_ARRAY_BOUNDS", None);
-    config.define("CONFIG_HAVE_NVME_URING", None);
-
-    // End defines from config-host.h
+    // Load the config defines directly from a header file
+    config.flag("-include");
+    config.flag(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/liburing/config-host.h"
+    ));
 
     config.flag_if_supported("-Wno-stack-protector");
 
@@ -673,6 +666,9 @@ fn build_io_uring() {
     }
     config.compile("uring"); // produces liburing.a
 }
+
+#[cfg(not(target_os = "linux"))]
+fn build_io_uring() {}
 
 fn build_snappy() {
     let target = env::var("TARGET").unwrap();
@@ -854,6 +850,7 @@ fn main() {
             println!("cargo:rustc-link-lib=dylib=stdc++");
         }
     }
+
     if cfg!(feature = "io_uring") && !try_to_find_and_link_lib("LIBURING") {
         println!("cargo:rerun-if-changed=liburing/");
         fail_on_empty_directory("liburing");

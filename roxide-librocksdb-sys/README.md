@@ -11,7 +11,7 @@ https://github.com/jsgf/rocksdb-sys
 # Updating to a new version of RocksDB
 
 1. `cd` to the `rocksdb` submodule directory where the RocksDB sources are checked out
-  1. Update the `rocksdb` submodule to the tag for whatever the new release is.  
+  1. Update the `rocksdb` submodule to the tag for whatever the new release is.
   1. ~~In the `rocksdb` subdirectory run `make util/build_version.cc`~~
      As of 6.20 this no longer works; instead do `make -j16 static_lib` instead
   1. Run `make unity.cc`
@@ -26,14 +26,20 @@ https://github.com/jsgf/rocksdb-sys
 
 # Updating to a new version of liburing
 
-The `liburing` folder contains a submodule with the most recent release of liburing.  This needs to be updated from time
-to time as RocksDB uses the latest and greatest features.
+`liburing` can't be included as a submodule, because the code as it exists in the git repo isn't compilable as it is.
+So updating liburing means downloading a new source tarball, extracting it, and then running some preparatory commands
+to get the code in a buildable state
 
 To do so:
 
-1. `cd` into `liburing`
-1. Go a `git pull` and then checkout whatever tag corresponds to the version you want
-1. Run `./configure` to generate the config header `config-host.h`.
-1. Modify the `build_io_uring` function in `build.rs` to make sure all defines from `config-host.h` are defined when
-   building
+1. download the latest source tarball and extract it into the `roxide-librocksdb-sys` directory.  That will result in
+   a subdirectory like `liburing-liburing-2.3`.
+1. rename the newly extracted subdirectory to just `liburing`
+1. cd into `liburing`
+1. modify the `.gitignore` file to remove the following entries:
+       src/include/liburing/compat.h
+       config-host.h
+1. Run `./configure` to generate the config header `config-host.h` and also the `compat.h` header plus probably some
+   other cruft
+1. commit the changes to the repo accordingly.
 
