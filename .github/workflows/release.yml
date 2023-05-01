@@ -9,8 +9,8 @@ name: release
 
 env:
   # Just a reassurance to mitigate sudden network connection problems
-  CARGO_NET_RETRY: 10
-  RUSTUP_MAX_RETRIES: 10
+  CARGO_NET_RETRY: 50
+  RUSTUP_MAX_RETRIES: 50
 
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
@@ -18,9 +18,6 @@ env:
   # We don't need any debug symbols on ci, this also speeds up builds a bunch
   RUSTFLAGS: --deny warnings -Cdebuginfo=0
   RUSTDOCFLAGS: --deny warnings
-
-  CARGO_REGISTRIES_ELASTIO_PRIVATE_INDEX: ${{ secrets.PRIVATE_REGISTRY_TOKEN_URL }}
-  CARGO_REGISTRIES_ELASTIO_PRIVATE_TOKEN: ${{ secrets.CLOUDSMITH_API_TOKEN }}
 
 jobs:
   # This is just a sanity check to make sure the code is minimally correct.
@@ -36,6 +33,7 @@ jobs:
         with:
           profile: minimal
           components: rustfmt, clippy
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: sudo apt-get install -y linux-headers-$(uname -r)
 
@@ -78,6 +76,8 @@ jobs:
       - run: |
           git config user.name "Tsar Ferris"
           git config user.email tsar-ferris@elastio.com
+
+      - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
       - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force --debug
 
