@@ -166,7 +166,7 @@ jobs:
           cat lcov.info | grep SF: || echo No source file information
 
       - name: Upload code coverage info
-        uses: coverallsapp/github-action@1.2.4
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "${{ github.workspace }}/lcov.info"

@@ -67,7 +67,7 @@ jobs:
 
       # Install cloudsmith CLI via pip
       - uses: actions/setup-python@v4
-      - run: pip3 install cloudsmith-cli
+      - run: pip install cloudsmith-cli
 
       # A committer identity is required in order to commit things
       - run: |
