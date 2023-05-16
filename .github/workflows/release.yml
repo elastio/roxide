@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
@@ -56,7 +56,7 @@ jobs:
     steps:
       # NASTY: This token must be the PAT of a user who has admin access to the repo
       # in order to bypass branch protections and commit directly to master.
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
           token: ${{ secrets.TSAR_FERRIS_GITHUB_TOKEN }}
@@ -66,11 +66,8 @@ jobs:
           profile: minimal
 
       # Install cloudsmith CLI via pip
-      - uses: actions/setup-python@v1
-      - uses: BSFishy/pip-action@v1
-        with:
-          packages: |
-            cloudsmith-cli
+      - uses: actions/setup-python@v4
+      - run: pip install cloudsmith-cli
 
       # A committer identity is required in order to commit things
       - run: |
@@ -79,7 +76,7 @@ jobs:
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
-      - run: cargo install --registry elastio-private xtask-core --bin cargo-xelastio --force --debug
+      - run: cargo install xtask-core --bin cargo-xelastio --force --debug --index https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git
 
       # Perform the actual release operations
       - run: cargo xelastio publish release ${{ github.event.inputs.bumpLevel }}
