@@ -4,10 +4,10 @@
 use crate::db::{db::*, opt_txdb::*, txdb::*, ColumnFamilyHandle};
 use crate::db_options::prelude::*;
 use crate::error::{self, prelude::*};
-use crate::ffi;
 use crate::ffi_try;
 use crate::ffi_util::{path_to_cstring, path_to_string};
 use crate::Cache;
+use crate::{ffi, PessimisticTxOptions};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
@@ -149,6 +149,9 @@ impl DbOpen for TransactionDb {
         P: AsRef<Path>,
         O: Into<Option<DbOptions>>,
     {
+        let db_options: DbOptions = db_options.into().unwrap_or_default();
+        let transaction_options = db_options.tx_options();
+
         // Call the RocksDB open API and get a database object
         let (db_ptr, cache, db_options, cfs) = ffi_open_helper(
             &path,
@@ -161,29 +164,24 @@ impl DbOpen for TransactionDb {
              column_family_handles| {
                 unsafe {
                     let tx_options = ffi::rocksdb_transactiondb_options_create();
-                    // These lines override the RocksDB defaults.  They are deliberately not
-                    // executed because for now we have no compelling need to override them.
-                    // However in testing related to https://github.com/elastio/elastio/pull/1332
-                    // this was useful to be able to override.  Therefore I'm leaving this here,
-                    // uncommented but disabled, so that these options can easily be overridden in
-                    // the future
 
-                    if false {
+                    if let Some(PessimisticTxOptions {
+                        default_lock_timeout_sec,
+                        tx_lock_timeout_sec,
+                    }) = transaction_options
+                    {
                         // Default stripe count is 16.  A higher stripe count means less lock
                         // contention when the number of CPU cores running operations is
                         // substantially larger than 16.
-                        ffi::rocksdb_transactiondb_options_set_num_stripes(tx_options, 16);
+                        // ffi::rocksdb_transactiondb_options_set_num_stripes(tx_options, 16);
 
-                        // Both lock timeouts default to 1 second.  When operations typically take
-                        // on the order of a millisecond or less this is reasonable.  If we ever
-                        // have situations where transaction locks are held for multiple seconds at
-                        // a time (like when the transaction is held open during an API call to
-                        // another service) this could become a problem.
                         ffi::rocksdb_transactiondb_options_set_default_lock_timeout(
-                            tx_options, 1_000,
+                            tx_options,
+                            (default_lock_timeout_sec * 1000).try_into().unwrap(),
                         );
                         ffi::rocksdb_transactiondb_options_set_transaction_lock_timeout(
-                            tx_options, 1_000,
+                            tx_options,
+                            (tx_lock_timeout_sec * 1000).try_into().unwrap(),
                         );
                     }
 

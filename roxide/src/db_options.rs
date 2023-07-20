@@ -169,6 +169,31 @@ pub(crate) struct DbComponents {
     pub column_families: Vec<ColumnFamilyDescriptor>,
 }
 
+/// Transaction options being applied to `TransactionDb`
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PessimisticTxOptions {
+    /// Lock timeout which is applied to standalone operations being executed without transaction.
+    pub(crate) default_lock_timeout_sec: u64,
+
+    /// Lock timeout for operations being executed in a transaction scope.
+    pub(crate) tx_lock_timeout_sec: u64,
+}
+
+impl Default for PessimisticTxOptions {
+    fn default() -> Self {
+        Self {
+            // RocksDB defaults (1 second for both parameters) are overridden in order to handle
+            // concurrent operations updating thousands of keys with a common sub-set of keys among
+            // the batches more efficiently avoiding unnecessary `LockTimeout`s with consequent retries.
+            // These values may be revised in the future, but for now it looks like a reasonable default
+            // which allows executing typical for ScaleZ batch update operations with conflicts
+            // from about 100 threads in `Debug` build without lock timeouts.
+            default_lock_timeout_sec: 60,
+            tx_lock_timeout_sec: 60,
+        }
+    }
+}
+
 /// Struct that contains all of the information about a database other than it's path.  Not to be
 /// confused with the `rocksdb::DBOptions` struct which is something entirely different and more
 /// confusing
@@ -226,6 +251,10 @@ pub struct DbOptions {
     /// specific CF.  If no cache is provided, the default is to allocate a single block cache for
     /// all CFs in the database, which is not shared with any other databases.
     default_block_cache: Option<Cache>,
+
+    /// Transaction options applied to all CFs of a `TransactionDb`.
+    /// This option is ignored for `OptimisticTransactionDb`.
+    tx_options: Option<PessimisticTxOptions>,
 
     /// Additional (non-default) column families.  The key is the name of the CF, and the value is
     /// a `HashMap` of settings for that CF.  Each CF inherits settings from `default_cf_options`
@@ -290,31 +319,23 @@ impl DbOptions {
     {
         DbOptions {
             db_options: Self::make_owned_hash_map(db_options),
-
             db_path: None,
-
             default_cf_options: Self::make_owned_hash_map(default_cf_options),
-
             default_block_cache: None,
+            tx_options: Some(PessimisticTxOptions::default()),
 
             column_families: column_families
                 .borrow()
                 .iter()
                 .map(|(k, v)| (k.to_string(), Self::make_owned_hash_map(v)))
                 .collect(),
-
             column_family_paths: HashMap::new(),
-
             column_family_block_caches: HashMap::new(),
 
             stats_level: StatsLevel::Disabled,
-
             merge_operators: HashMap::new(),
-
             event_listener: None,
-
             logger: None,
-
             log_level: log::LevelFilter::Error,
         }
     }
@@ -405,6 +426,12 @@ impl DbOptions {
             "block_based_table_factory".to_string(),
             Self::build_options_string(options),
         );
+    }
+
+    /// Sets transaction options like lock timeouts for `TransactionDb` operating
+    /// in pessimistic concurrency mode.
+    pub fn set_pessimistic_tx_options(&mut self, options: PessimisticTxOptions) {
+        self.tx_options = Some(options);
     }
 
     /// Sets the default number of bits per key to use for creation of bloom filters for all column
@@ -671,6 +698,10 @@ impl DbOptions {
             self.logger = Some(Arc::new(logger));
             self.log_level = level;
         }
+    }
+
+    pub(crate) fn tx_options(&self) -> Option<PessimisticTxOptions> {
+        self.tx_options.clone()
     }
 
     /// Once the options are set correctly, this method is called to consume the struct and convert
