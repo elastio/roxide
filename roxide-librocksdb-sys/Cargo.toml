@@ -1,6 +1,6 @@
 [package]
 name = "roxide-librocksdb-sys"
-version = "6.0.1"
+version = "6.0.2-dev"
 edition = "2021"
 authors = [
 	"Karl Hobley <karlhobley10@gmail.com>",
@@ -39,6 +39,10 @@ jemalloc-sys = { version = "0.5", optional = true, features = [
 	"unprefixed_malloc_on_supported_platforms",
 ] }
 libc = "0.2"
+
+[dev-dependencies]
+const-cstr = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
 bindgen = { version = "0.65", default-features = false, features = ["runtime"] }
