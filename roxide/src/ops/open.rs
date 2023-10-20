@@ -309,7 +309,7 @@ where
     // If Result::Err(...) in iterator is encountered, Result::Err(...) is returned immediately.
     let cf_map_result: Result<HashMap<_, _>> = cf_handle_ptrs
         .into_iter()
-        .zip(components.column_families.into_iter())
+        .zip(components.column_families)
         .map(
             |(cf_handle, cf_descriptor)| match ptr::NonNull::new(cf_handle) {
                 None => DatabaseError {

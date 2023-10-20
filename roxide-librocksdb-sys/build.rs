@@ -806,19 +806,19 @@ fn build_bzip2() {
 }
 
 fn try_to_find_and_link_lib(lib_name: &str) -> bool {
-    if let Ok(v) = env::var(&format!("{}_COMPILE", lib_name)) {
+    if let Ok(v) = env::var(format!("{lib_name}_COMPILE")) {
         if v.to_lowercase() == "true" || v == "1" {
             return false;
         }
     }
 
-    if let Ok(lib_dir) = env::var(&format!("{}_LIB_DIR", lib_name)) {
+    if let Ok(lib_dir) = env::var(format!("{lib_name}_LIB_DIR")) {
         println!("cargo:rustc-link-search=native={}", lib_dir);
-        let mode = match env::var_os(&format!("{}_STATIC", lib_name)) {
+        let mode = match env::var_os(format!("{lib_name}_STATIC")) {
             Some(_) => "static",
             None => "dylib",
         };
-        println!("cargo:rustc-link-lib={}={}", mode, lib_name.to_lowercase());
+        println!("cargo:rustc-link-lib={mode}={}", lib_name.to_lowercase());
         return true;
     }
     false
@@ -827,7 +827,7 @@ fn try_to_find_and_link_lib(lib_name: &str) -> bool {
 fn cxx_standard() -> String {
     env::var("ROCKSDB_CXX_STD").map_or("-std=c++20".to_owned(), |cxx_std| {
         if !cxx_std.starts_with("-std=") {
-            format!("-std={}", cxx_std)
+            format!("-std={cxx_std}")
         } else {
             cxx_std
         }

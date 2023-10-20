@@ -111,7 +111,7 @@ impl DbVector {
     pub unsafe fn from_c(val: *mut u8, val_len: libc::size_t) -> DbVector {
         DbVector {
             base: val,
-            len: val_len as usize,
+            len: val_len,
         }
     }
 

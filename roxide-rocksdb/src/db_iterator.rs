@@ -302,7 +302,7 @@ impl<'a, D: DBAccess> DBRawIteratorWithThreadMode<'a, D> {
                 let key_len_ptr: *mut size_t = &mut key_len;
                 let key_ptr = ffi::rocksdb_iter_key(self.inner, key_len_ptr) as *const c_uchar;
 
-                Some(slice::from_raw_parts(key_ptr, key_len as usize))
+                Some(slice::from_raw_parts(key_ptr, key_len))
             }
         } else {
             None
@@ -319,7 +319,7 @@ impl<'a, D: DBAccess> DBRawIteratorWithThreadMode<'a, D> {
                 let val_len_ptr: *mut size_t = &mut val_len;
                 let val_ptr = ffi::rocksdb_iter_value(self.inner, val_len_ptr) as *const c_uchar;
 
-                Some(slice::from_raw_parts(val_ptr, val_len as usize))
+                Some(slice::from_raw_parts(val_ptr, val_len))
             }
         } else {
             None

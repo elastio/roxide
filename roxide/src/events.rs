@@ -169,25 +169,21 @@ impl FlushJobInfo {
     pub fn triggered_writes_slowdown(&self) -> bool {
         let raw_ptr = self.raw_ptr;
 
-        let flag = unsafe {
+        unsafe {
             cpp!([raw_ptr as "const rocksdb::FlushJobInfo*"] -> bool as "bool" {
                 return raw_ptr->triggered_writes_slowdown;
             })
-        };
-
-        flag as bool
+        }
     }
 
     pub fn triggered_writes_stop(&self) -> bool {
         let raw_ptr = self.raw_ptr;
 
-        let flag = unsafe {
+        unsafe {
             cpp!([raw_ptr as "const rocksdb::FlushJobInfo*"] -> bool as "bool" {
                 return raw_ptr->triggered_writes_stop;
             })
-        };
-
-        flag as bool
+        }
     }
 }
 

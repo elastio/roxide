@@ -38,7 +38,7 @@ impl WriteBatch {
         unsafe {
             let mut batch_size: libc::size_t = 0;
             ffi::rocksdb_writebatch_data(self.inner.as_ptr(), &mut batch_size);
-            batch_size as usize
+            batch_size
         }
     }
 

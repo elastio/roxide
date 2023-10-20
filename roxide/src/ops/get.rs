@@ -121,8 +121,8 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
 
     let results: Result<Vec<(K, Option<DbPinnableSlice>)>> = keys
         .into_iter()
-        .zip(values.into_iter())
-        .zip(statuses.into_iter())
+        .zip(values)
+        .zip(statuses)
         .map(|((key, value), status)| {
             let status = status.into_status();
 

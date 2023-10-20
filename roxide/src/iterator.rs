@@ -47,8 +47,7 @@ use crate::ffi;
 use crate::ffi_try;
 use crate::handle;
 use crate::handle::RocksObjectDefault;
-use crate::ops::BinaryStr;
-use crate::ops::OpenKeyRange;
+use crate::ops::{BinaryStr, OpenKeyRange, RawVec};
 use crate::rocks_class;
 use rocksdb::ReadOptions;
 use std::ptr;
@@ -263,7 +262,7 @@ pub struct DbRangeIterator {
 
     /// We have to hold on to this memory where the upper and lower key bounds are stored, until
     /// Rocks is done with it (that is, the FFI iterator object stored in `inner` is freed).
-    range: Option<OpenKeyRange<(*mut u8, usize)>>,
+    range: Option<OpenKeyRange<RawVec>>,
 }
 
 impl DbRangeIterator {
@@ -271,7 +270,7 @@ impl DbRangeIterator {
         parent: handle::AnonymousHandle,
         iterator: impl Into<IteratorHandle>,
         options: ReadOptions,
-        range: OpenKeyRange<(*mut u8, usize)>,
+        range: OpenKeyRange<RawVec>,
     ) -> Self {
         Self {
             inner: UnboundedIterator::new(parent, iterator, ReadOptions::from_option(options)),
@@ -563,7 +562,7 @@ impl RawIterator {
             let key_ptr =
                 ffi::rocksdb_iter_key(self.inner.as_ptr(), key_len_ptr) as *const libc::c_uchar;
 
-            Some((key_ptr, key_len as usize))
+            Some((key_ptr, key_len))
         } else {
             None
         }
@@ -583,7 +582,7 @@ impl RawIterator {
             let val_ptr =
                 ffi::rocksdb_iter_value(self.inner.as_ptr(), val_len_ptr) as *const libc::c_uchar;
 
-            Some((val_ptr, val_len as usize))
+            Some((val_ptr, val_len))
         } else {
             None
         }

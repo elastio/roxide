@@ -236,7 +236,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
 
     /// Opens the database with a Time to Live compaction filter and column family names.
     ///
-    /// Column families opened using this function will be created with default `Options`.    
+    /// Column families opened using this function will be created with default `Options`.
     pub fn open_cf_with_ttl<P, I, N>(
         opts: &Options,
         path: P,
@@ -1628,7 +1628,7 @@ impl<T: ThreadMode> DBWithThreadMode<T> {
                 for i in 0..n {
                     let name = from_cstr(ffi::rocksdb_livefiles_name(files, i));
                     let size = ffi::rocksdb_livefiles_size(files, i);
-                    let level = ffi::rocksdb_livefiles_level(files, i) as i32;
+                    let level = ffi::rocksdb_livefiles_level(files, i);
 
                     // get smallest key inside file
                     let smallest_key = ffi::rocksdb_livefiles_smallestkey(files, i, &mut key_size);
@@ -1833,7 +1833,7 @@ fn convert_options(opts: &[(&str, &str)]) -> Result<Vec<(CString, CString)>, Err
 fn convert_values(values: Vec<*mut c_char>, values_sizes: Vec<usize>) -> Vec<Vec<u8>> {
     values
         .into_iter()
-        .zip(values_sizes.into_iter())
+        .zip(values_sizes)
         .map(|(v, s)| {
             let value = unsafe { slice::from_raw_parts(v as *const u8, s) }.into();
             unsafe {
