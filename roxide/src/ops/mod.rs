@@ -358,24 +358,23 @@ impl<'a, K: BinaryStr> From<&'a KeyRange<K>> for KeyRange<&'a [u8]> {
 ///
 /// # Examples
 ///
+/// ```
 /// # use roxide::*;
 ///
-/// //You can use a tuple as a range
-/// let keys = (b"foo", b"bar");
+/// // You can use a tuple as a range
+/// let keys = (b"bar", b"foo");
 /// test_range(keys);
 ///
-/// //Or a reference to a tuple
-/// let keys = (b"foo", b"bar");
+/// // Or a reference to a tuple
+/// let keys = (b"bar", b"foo");
 /// test_range(&keys);
 ///
-/// //Or even a reference to another `KeyRange`
-/// let range = KeyRange::new(b"foo", b"bar");
-/// test_range(&range);
-///
-/// fn test_range<K: BinaryStr>(range: impl Into<OpenKeyRange<K>) {
-///     assert_eq!(range.start().as_slice_opt(), Some(b"foo".as_slice()));
-///     assert_eq!(range.end().as_slice_opt(), Some(b"bar".as_slice()));
+/// fn test_range<K: BinaryStr>(range: impl Into<OpenKeyRange<K>>) {
+///     let range = range.into();
+///     assert_eq!(range.start().as_slice_opt(), Some(b"bar".as_slice()));
+///     assert_eq!(range.end().as_slice_opt(), Some(b"foo".as_slice()));
 /// }
+/// ```
 ///
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OpenKeyRange<K> {
