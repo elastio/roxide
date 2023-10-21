@@ -4,9 +4,9 @@ description = "Elastio's fork of `rocksdb` crate which `roxide` wraps and makes 
 version = "6.0.2-dev"
 edition = "2021"
 authors = [
-	"Tyler Neely <t@jujit.su>",
-	"David Greenberg <dsg123456789@gmail.com>",
-	"Adam Nelson <adam@elastio.com>",
+    "Tyler Neely <t@jujit.su>",
+    "David Greenberg <dsg123456789@gmail.com>",
+    "Adam Nelson <adam@elastio.com>",
 ]
 repository = "https://github.com/elastio/roxide"
 license = "Apache-2.0"

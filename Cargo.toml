@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-	"roxide",
-	"roxide-rocksdb",
-	"roxide-librocksdb-sys"
+    "roxide",
+    "roxide-rocksdb",
+    "roxide-librocksdb-sys"
 ]

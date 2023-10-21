@@ -3,9 +3,9 @@ name = "roxide-librocksdb-sys"
 version = "6.0.2-dev"
 edition = "2021"
 authors = [
-	"Karl Hobley <karlhobley10@gmail.com>",
-	"Arkadiy Paronyan <arkadiy@ethcore.io>",
-	"Adam Nelson <adam@elastio.com>",
+    "Karl Hobley <karlhobley10@gmail.com>",
+    "Arkadiy Paronyan <arkadiy@ethcore.io>",
+    "Adam Nelson <adam@elastio.com>",
 ]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 description = "Elastio's fork of `librocksdb-sys` used in support of our `roxide` RocksDB wrapper"
@@ -36,7 +36,7 @@ jemalloc = ["jemalloc-sys"]
 
 [dependencies]
 jemalloc-sys = { version = "0.5", optional = true, features = [
-	"unprefixed_malloc_on_supported_platforms",
+    "unprefixed_malloc_on_supported_platforms",
 ] }
 libc = "0.2"
 
