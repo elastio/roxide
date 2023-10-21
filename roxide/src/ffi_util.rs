@@ -505,7 +505,7 @@ macro_rules! make_dyn_trait_wrapper {
 /// parameter as the last argument, which is populated with an error message if the call fails,
 /// otherwise is set to NULL.
 ///
-/// This macro evaluates to a Result<T> where `T` is whatever the return type of the function is
+/// This macro evaluates to a `Result<T>` where `T` is whatever the return type of the function is
 #[macro_export]
 macro_rules! ffi_try {
     ( $($function:ident)::*( $( $arg:expr,)* ) ) => ({
