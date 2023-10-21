@@ -42,7 +42,10 @@ jobs:
         id: rust-toolchain
         run: |
           echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
-      - uses: dtolnay/rust-toolchain@master
+
+      # Pinning a git commit to work around https://github.com/dtolnay/rust-toolchain/issues/95
+      # Remove the pinned commit when using Rust 1.73+ where the problem is fixed
+      - uses: dtolnay/rust-toolchain@7a26acb92768ab3675ddfe846a5b2f438c85f215
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
@@ -71,7 +74,10 @@ jobs:
         id: rust-toolchain
         run: |
           echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
-      - uses: dtolnay/rust-toolchain@master
+
+      # Pinning a git commit to work around https://github.com/dtolnay/rust-toolchain/issues/95
+      # Remove the pinned commit when using Rust 1.73+ where the problem is fixed
+      - uses: dtolnay/rust-toolchain@7a26acb92768ab3675ddfe846a5b2f438c85f215
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
@@ -111,7 +117,10 @@ jobs:
         id: rust-toolchain
         run: |
           echo "RUST_TOOLCHAIN=$(cat rust-toolchain)" >> $GITHUB_ENV
-      - uses: dtolnay/rust-toolchain@master
+
+      # Pinning a git commit to work around https://github.com/dtolnay/rust-toolchain/issues/95
+      # Remove the pinned commit when using Rust 1.73+ where the problem is fixed
+      - uses: dtolnay/rust-toolchain@7a26acb92768ab3675ddfe846a5b2f438c85f215
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
@@ -170,4 +179,3 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: "${{ github.workspace }}/lcov.info"
-
