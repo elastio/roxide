@@ -106,7 +106,7 @@ mod test {
         let db = Db::open(&path, options)?;
 
         assert_eq!(
-            &vec!["default", "bar"].sort_unstable(),
+            &["default", "bar"].sort_unstable(),
             &db.get_cf_names().sort_unstable()
         );
 

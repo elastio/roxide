@@ -27,19 +27,14 @@ static std::shared_ptr<rocksdb::Statistics> get_stats_ptr(rocksdb::DB* db) {
 /// * `Disabled` is equivalent to a `nullptr` value for the `statistics` object in `Options`
 /// * `Minimal` is equivalent to `kExceptDetailedTimers`
 /// * `Full` is equivalent to `kAll`
-#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize, Eq)]
+#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize, Eq, Default)]
 pub enum StatsLevel {
+    #[default]
     Disabled,
 
     Minimal,
 
     Full,
-}
-
-impl Default for StatsLevel {
-    fn default() -> Self {
-        StatsLevel::Disabled
-    }
 }
 
 impl StatsLevel {

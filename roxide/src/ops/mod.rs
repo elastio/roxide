@@ -358,24 +358,23 @@ impl<'a, K: BinaryStr> From<&'a KeyRange<K>> for KeyRange<&'a [u8]> {
 ///
 /// # Examples
 ///
+/// ```
 /// # use roxide::*;
 ///
-/// //You can use a tuple as a range
-/// let keys = (b"foo", b"bar");
+/// // You can use a tuple as a range
+/// let keys = (b"bar", b"foo");
 /// test_range(keys);
 ///
-/// //Or a reference to a tuple
-/// let keys = (b"foo", b"bar");
+/// // Or a reference to a tuple
+/// let keys = (b"bar", b"foo");
 /// test_range(&keys);
 ///
-/// //Or even a reference to another `KeyRange`
-/// let range = KeyRange::new(b"foo", b"bar");
-/// test_range(&range);
-///
-/// fn test_range<K: BinaryStr>(range: impl Into<OpenKeyRange<K>) {
-///     assert_eq!(range.start().as_slice_opt(), Some(b"foo".as_slice()));
-///     assert_eq!(range.end().as_slice_opt(), Some(b"bar".as_slice()));
+/// fn test_range<K: BinaryStr>(range: impl Into<OpenKeyRange<K>>) {
+///     let range = range.into();
+///     assert_eq!(range.start().as_slice_opt(), Some(b"bar".as_slice()));
+///     assert_eq!(range.end().as_slice_opt(), Some(b"foo".as_slice()));
 /// }
+/// ```
 ///
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OpenKeyRange<K> {
@@ -467,7 +466,7 @@ impl OpenKeyRange<Vec<u8>> {
     ///
     /// This form is not very useful in Rust, but it is very useful when passing those pointers to
     /// RocksDB
-    pub(crate) fn into_raw_parts(self) -> OpenKeyRange<(*mut u8, usize)> {
+    pub(crate) fn into_raw_parts(self) -> OpenKeyRange<RawVec> {
         // Forget the two owned Vec values, and instead convert them into raw pointers.
         let (start, end) = self.into_tuple();
 
@@ -478,7 +477,7 @@ impl OpenKeyRange<Vec<u8>> {
 
             std::mem::forget(vec);
 
-            (ptr, len)
+            RawVec(ptr, len)
         });
 
         let end = end.map(|mut vec| {
@@ -488,7 +487,7 @@ impl OpenKeyRange<Vec<u8>> {
 
             std::mem::forget(vec);
 
-            (ptr, len)
+            RawVec(ptr, len)
         });
 
         OpenKeyRange::new(start, end)
@@ -497,11 +496,11 @@ impl OpenKeyRange<Vec<u8>> {
     /// Restores components previously produced with `into_raw_parts` into `Vec`s controlled by
     /// Rust.  This must be called at some point after `into_raw_parts`, when the memory is no
     /// longer being used by RocksDB C++ code, for example when the range iterator has been freed.
-    pub(crate) unsafe fn from_raw_parts(range: OpenKeyRange<(*mut u8, usize)>) -> Self {
+    pub(crate) unsafe fn from_raw_parts(range: OpenKeyRange<RawVec>) -> Self {
         let (start, end) = range.into_tuple();
 
-        let start = start.map(|(ptr, len)| Vec::from_raw_parts(ptr, len, len));
-        let end = end.map(|(ptr, len)| Vec::from_raw_parts(ptr, len, len));
+        let start = start.map(|RawVec(ptr, len)| Vec::from_raw_parts(ptr, len, len));
+        let end = end.map(|RawVec(ptr, len)| Vec::from_raw_parts(ptr, len, len));
 
         OpenKeyRange::new(start, end)
     }
@@ -509,7 +508,7 @@ impl OpenKeyRange<Vec<u8>> {
 
 // When the key range is expressed as raw pointers, it can't be used as a normal key range but does
 // have some helpers for getting working with the pointers
-impl OpenKeyRange<(*mut u8, usize)> {
+impl OpenKeyRange<RawVec> {
     /// Free the memory associated with this range.  This MUST be called by whatever type owns this
     /// OpenKeyRange in that type's `Drop` implementation, or memory will be leaked!
     pub(crate) unsafe fn free(self) {
@@ -519,7 +518,7 @@ impl OpenKeyRange<(*mut u8, usize)> {
     }
 
     /// Gets the raw pointer and length of the start key, if any.
-    pub(crate) fn raw_start(&self) -> Option<(*mut u8, usize)> {
+    pub(crate) fn raw_start(&self) -> Option<RawVec> {
         match self {
             OpenKeyRange::KeysStartingFrom(start) => Some(*start),
             OpenKeyRange::KeysBetween(start, _end) => Some(*start),
@@ -531,11 +530,11 @@ impl OpenKeyRange<(*mut u8, usize)> {
     #[cfg(test)]
     pub(crate) unsafe fn start_as_slice(&self) -> Option<&[u8]> {
         self.raw_start()
-            .map(|(ptr, len)| std::slice::from_raw_parts(ptr, len))
+            .map(|RawVec(ptr, len)| std::slice::from_raw_parts(ptr, len))
     }
 
     /// Gets the raw pointer and length of the end key, if any.
-    pub(crate) fn raw_end(&self) -> Option<(*mut u8, usize)> {
+    pub(crate) fn raw_end(&self) -> Option<RawVec> {
         match self {
             OpenKeyRange::KeysUpTo(end) => Some(*end),
             OpenKeyRange::KeysBetween(_start, end) => Some(*end),
@@ -547,7 +546,7 @@ impl OpenKeyRange<(*mut u8, usize)> {
     #[cfg(test)]
     pub(crate) unsafe fn end_as_slice(&self) -> Option<&[u8]> {
         self.raw_end()
-            .map(|(ptr, len)| std::slice::from_raw_parts(ptr, len))
+            .map(|RawVec(ptr, len)| std::slice::from_raw_parts(ptr, len))
     }
 
     /// Sets the lower and upper iteration bounds of a `ReadOptions` struct to the pointers stored
@@ -557,7 +556,7 @@ impl OpenKeyRange<(*mut u8, usize)> {
     /// RocksDB's use of these read options.  If not, "undefined behavior" just doesn't describe
     /// the horrors you will unleash upon yourself and your descendents.
     pub(crate) fn set_read_options_bounds(&self, options: &mut crate::db_options::ReadOptions) {
-        if let Some((ptr, len)) = self.raw_start() {
+        if let Some(RawVec(ptr, len)) = self.raw_start() {
             unsafe {
                 crate::ffi::rocksdb_readoptions_set_iterate_lower_bound(
                     options.inner,
@@ -567,7 +566,7 @@ impl OpenKeyRange<(*mut u8, usize)> {
             }
         }
 
-        if let Some((ptr, len)) = self.raw_end() {
+        if let Some(RawVec(ptr, len)) = self.raw_end() {
             unsafe {
                 crate::ffi::rocksdb_readoptions_set_iterate_upper_bound(
                     options.inner,
@@ -579,14 +578,12 @@ impl OpenKeyRange<(*mut u8, usize)> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct RawVec(*mut u8, usize);
+
 /// Rust doesn't allow mut pointers to be `Send` for obvious safety reasons, but in this case it's
 /// ok because that pointer represents ownership of the Vec it came from.
-///
-/// The `allow` is intentional here; in the future this explicit impl will mean that there is no
-/// longer any implicit `Send` impl for `OpenKeyRange` regardless of the type parameter.  That's
-/// okay; when that change lands in stable Rust we'll address it if needed.
-#[allow(suspicious_auto_trait_impls)]
-unsafe impl Send for OpenKeyRange<(*mut u8, usize)> {}
+unsafe impl Send for RawVec {}
 
 impl<K: BinaryStr> fmt::Display for OpenKeyRange<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

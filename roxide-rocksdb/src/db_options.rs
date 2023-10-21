@@ -109,6 +109,7 @@ impl Drop for EnvWrapper {
 
 impl Env {
     /// Returns default env
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Env, Error> {
         let env = unsafe { ffi::rocksdb_create_default_env() };
         if env.is_null() {
@@ -961,10 +962,7 @@ impl Options {
     /// Default: `0`
     pub fn set_compaction_readahead_size(&mut self, compaction_readahead_size: usize) {
         unsafe {
-            ffi::rocksdb_options_compaction_readahead_size(
-                self.inner,
-                compaction_readahead_size as usize,
-            );
+            ffi::rocksdb_options_compaction_readahead_size(self.inner, compaction_readahead_size);
         }
     }
 

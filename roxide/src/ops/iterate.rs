@@ -25,7 +25,7 @@ use std::ptr::NonNull;
 fn set_option_ranges<K: BinaryStr>(
     options: &mut ReadOptions,
     key_range: impl Into<OpenKeyRange<K>>,
-) -> OpenKeyRange<(*mut u8, usize)> {
+) -> OpenKeyRange<RawVec> {
     // Convert the keys into owned Vec<u8> buffers
     let key_range = key_range.into().to_owned();
 

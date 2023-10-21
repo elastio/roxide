@@ -1067,7 +1067,7 @@ mod test {
             }
 
             fn generate_test_keys() -> Vec<u64> {
-                (0u64..KEYS_PER_CONFLICTING_TX as u64).into_iter().collect()
+                (0u64..KEYS_PER_CONFLICTING_TX as u64).collect()
             }
 
             fn validate_test_keys<DBT: DbLike + BeginTrans>(
@@ -1176,7 +1176,6 @@ mod test {
                             // with the keys of other threads.  So thread 1 will get key 1, 33, 65, thread 2 will get
                             // 34, 66, and so on.
                             let mut keys = (0..KEYS_PER_CONFLICTING_TX)
-                                .into_iter()
                                 .map(|key_idx| {
                                     (thread_idx * KEYS_PER_CONFLICTING_TX + key_idx) as u64
                                 })
