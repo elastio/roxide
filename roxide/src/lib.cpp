@@ -13,6 +13,10 @@ namespace rocksdb_hack {
     extern "C" {
         struct rocksdb_t                 { rocksdb::DB*               rep; };
 
+        struct rocksdb_transactiondb_options_t {
+          rocksdb::TransactionDBOptions rep;
+        };
+
         struct rocksdb_transactiondb_t {
           rocksdb::TransactionDB* rep;
         };
@@ -167,6 +171,40 @@ rocksdb::Checkpoint* cast_to_checkpoint(::rocksdb_checkpoint_t* checkpoint) {
     c->rep.swap(cache);
 
     return reinterpret_cast<struct ::rocksdb_cache_t*>(c);
+}
+
+::rocksdb_t* wrap_db(rocksdb::DB* db) {
+    auto* wrapped_db = new rocksdb_hack::rocksdb_t;
+    wrapped_db->rep = db;
+    return reinterpret_cast<::rocksdb_t*>(wrapped_db);
+}
+
+::rocksdb_transactiondb_t* wrap_db(rocksdb::TransactionDB* db){
+    auto* wrapped_db = new rocksdb_hack::rocksdb_transactiondb_t;
+    wrapped_db->rep = db;
+    return reinterpret_cast<::rocksdb_transactiondb_t*>(wrapped_db);
+}
+
+::rocksdb_optimistictransactiondb_t* wrap_db(rocksdb::OptimisticTransactionDB* db) {
+    auto* wrapped_db = new rocksdb_hack::rocksdb_optimistictransactiondb_t;
+    wrapped_db->rep = db;
+    return reinterpret_cast<::rocksdb_optimistictransactiondb_t*>(wrapped_db);
+}
+
+::rocksdb_column_family_handle_t* wrap_cf(rocksdb::ColumnFamilyHandle* cf) {
+    auto* wrapped_cf = new rocksdb_hack::rocksdb_column_family_handle_t;
+    wrapped_cf->rep = cf;
+    return reinterpret_cast<::rocksdb_column_family_handle_t*>(wrapped_cf);
+}
+
+rocksdb::Options get_options_rep(const ::rocksdb_options_t* options) {
+    auto* casted_options = reinterpret_cast<const rocksdb_hack::rocksdb_options_t*>(options);
+    return casted_options->rep;
+}
+
+rocksdb::TransactionDBOptions get_options_rep(const ::rocksdb_transactiondb_options_t* txn_db_options) {
+    auto* casted_options = reinterpret_cast<const rocksdb_hack::rocksdb_transactiondb_options_t*>(txn_db_options);
+    return casted_options->rep;
 }
 
 rocksdb::Slice string_as_slice(const char* string, size_t len) {

@@ -17,17 +17,21 @@ where
 {
     fn get_latest_sequence_number(&self) -> u64 {
         let db_ptr = self.get_db_ptr();
-        let mut seq_num = 0u64;
-        let seq_num_ptr: *mut u64 = &mut seq_num;
-
-        unsafe {
-            cpp!([db_ptr as "rocksdb::DB*", seq_num_ptr as "uint64_t*"] {
-                *seq_num_ptr = db_ptr->GetLatestSequenceNumber();
-            });
-        }
-
-        seq_num
+        get_latest_sequence_number_impl(db_ptr)
     }
+}
+
+pub(crate) fn get_latest_sequence_number_impl(db_ptr: *mut libc::c_void) -> u64 {
+    let mut seq_num = 0u64;
+    let seq_num_ptr: *mut u64 = &mut seq_num;
+
+    unsafe {
+        cpp!([db_ptr as "rocksdb::DB*", seq_num_ptr as "uint64_t*"] {
+            *seq_num_ptr = db_ptr->GetLatestSequenceNumber();
+        });
+    }
+
+    seq_num
 }
 
 #[cfg(test)]

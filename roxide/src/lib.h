@@ -66,6 +66,13 @@ rocksdb::Cache* cast_to_cache(::rocksdb_cache_t* cache);
 rocksdb::Checkpoint* cast_to_checkpoint(::rocksdb_checkpoint_t* checkpoint);
 
 ::rocksdb_cache_t* wrap_cache(std::shared_ptr<rocksdb::Cache> cache);
+::rocksdb_t* wrap_db(rocksdb::DB* db);
+::rocksdb_transactiondb_t* wrap_db(rocksdb::TransactionDB* db);
+::rocksdb_optimistictransactiondb_t* wrap_db(rocksdb::OptimisticTransactionDB* db);
+::rocksdb_column_family_handle_t* wrap_cf(rocksdb::ColumnFamilyHandle* cf);
+
+rocksdb::Options get_options_rep(const ::rocksdb_options_t* options);
+rocksdb::TransactionDBOptions get_options_rep(const ::rocksdb_transactiondb_options_t* txn_db_options);
 
 rocksdb::Slice string_as_slice(const char* string, size_t len);
 
