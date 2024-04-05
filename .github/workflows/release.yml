@@ -15,6 +15,8 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
 
+  CARGO_REGISTRIES_ELASTIO_PRIVATE_TOKEN: ${{ secrets.CLOUDSMITH_API_TOKEN }}
+
   # We don't need any debug symbols on ci, this also speeds up builds a bunch
   RUSTFLAGS: --deny warnings -Cdebuginfo=0
   RUSTDOCFLAGS: --deny warnings
@@ -51,7 +53,8 @@ jobs:
       - rust-lint
 
     env:
-      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_TOKEN }}
+      CARGO_REGISTRIES_ELASTIO_PRIVATE_CREDENTIAL_PROVIDER: cargo:token
+      CARGO_REGISTRIES_ELASTIO_PRIVATE_INDEX: "sparse+https://cargo.cloudsmith.io/elastio/private/"
 
     steps:
       # NASTY: This token must be the PAT of a user who has admin access to the repo
@@ -76,7 +79,7 @@ jobs:
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
-      - run: cargo install xtask-core --bin cargo-xelastio --force --debug --index https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git
+      - run: cargo install xtask-core --bin cargo-xelastio --force --debug --registry elastio-private
 
       # Perform the actual release operations
       - run: cargo xelastio publish release ${{ github.event.inputs.bumpLevel }}
