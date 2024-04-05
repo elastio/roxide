@@ -4,15 +4,70 @@
 use crate::db::{db::*, opt_txdb::*, txdb::*, ColumnFamilyHandle};
 use crate::db_options::prelude::*;
 use crate::error::{self, prelude::*};
-use crate::ffi_try;
 use crate::ffi_util::{path_to_cstring, path_to_string};
+use crate::status;
 use crate::Cache;
 use crate::{ffi, PessimisticTxOptions};
+use roxide_librocksdb_sys::{
+    rocksdb_column_family_handle_t, rocksdb_optimistictransactiondb_t, rocksdb_options_t,
+    rocksdb_t, rocksdb_transactiondb_options_t, rocksdb_transactiondb_t,
+};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::path::Path;
 use std::ptr;
+
+cpp! {{
+    #include "src/ops/open.h"
+    #include "src/ops/open.cpp"
+}}
+
+// Declarations for C callable wrappers defined in `open.cpp`
+// Prefixed with `roxide` to avoid conflicts with corresponding functions in exported by RocksDB C API.
+extern "C" {
+    pub fn roxide_rocksdb_open_column_families(
+        options: *const rocksdb_options_t,
+        name: *const libc::c_char,
+        num_column_families: libc::c_int,
+        column_family_names: *const *const libc::c_char,
+        column_family_options: *const *const rocksdb_options_t,
+        column_family_handles: *mut *mut rocksdb_column_family_handle_t,
+        result: *mut *mut rocksdb_t,
+    ) -> status::CppStatus;
+
+    pub fn roxide_rocksdb_transactiondb_open_column_families(
+        options: *const rocksdb_options_t,
+        txn_db_options: *const rocksdb_transactiondb_options_t,
+        name: *const libc::c_char,
+        num_column_families: libc::c_int,
+        column_family_names: *const *const libc::c_char,
+        column_family_options: *const *const rocksdb_options_t,
+        column_family_handles: *mut *mut rocksdb_column_family_handle_t,
+        result: *mut *mut rocksdb_transactiondb_t,
+    ) -> status::CppStatus;
+
+    pub fn roxide_rocksdb_open_for_read_only_column_families(
+        options: *const rocksdb_options_t,
+        name: *const libc::c_char,
+        num_column_families: libc::c_int,
+        column_family_names: *const *const libc::c_char,
+        column_family_options: *const *const rocksdb_options_t,
+        column_family_handles: *mut *mut rocksdb_column_family_handle_t,
+        error_if_wal_file_exists: libc::c_uchar,
+        result: *mut *mut rocksdb_t,
+    ) -> status::CppStatus;
+
+    pub fn roxide_rocksdb_optimistictransactiondb_open_column_families(
+        options: *const rocksdb_options_t,
+        name: *const libc::c_char,
+        num_column_families: libc::c_int,
+        column_family_names: *const *const libc::c_char,
+        column_family_options: *const *const rocksdb_options_t,
+        column_family_handles: *mut *mut rocksdb_column_family_handle_t,
+        result: *mut *mut rocksdb_optimistictransactiondb_t,
+    ) -> status::CppStatus;
+}
 
 pub trait DbOpen: Sized {
     /// Open a RocksDB database at a given path.  This might or might not exist, and might or might
@@ -76,6 +131,34 @@ fn ensure_logging_configured(path: &Path, options: &mut DbOptions) {
     options.set_default_logger(level, logger);
 }
 
+impl Db {
+    pub(crate) fn rocksdb_open_for_read_only_column_families(
+        options: *const ffi::rocksdb_options_t,
+        path: *const libc::c_char,
+        num_column_families: libc::c_int,
+        column_family_names: *mut *const libc::c_char,
+        column_family_options: *mut *const ffi::rocksdb_options_t,
+        column_family_handles: *mut *mut ffi::rocksdb_column_family_handle_t,
+        error_if_wal_file_exists: libc::c_uchar,
+    ) -> Result<*mut rocksdb_t> {
+        unsafe {
+            let mut result: *mut rocksdb_t = std::ptr::null_mut();
+            let cpp_status = roxide_rocksdb_open_for_read_only_column_families(
+                options,
+                path,
+                num_column_families,
+                column_family_names,
+                column_family_options,
+                column_family_handles,
+                error_if_wal_file_exists,
+                &mut result,
+            );
+
+            cpp_status.into_result().map(|_| result)
+        }
+    }
+}
+
 impl DbOpen for Db {
     /// Open a RocksDB database at a given path.  This might or might not exist, and might or might
     /// not be created if it doesn't exist, depending on the options selected.
@@ -89,7 +172,31 @@ impl DbOpen for Db {
         // Set up a default logger if there isn't already one
 
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(
+            &path,
+            db_options,
+            |options,
+             path,
+             num_column_families,
+             column_family_names,
+             column_family_options,
+             column_family_handles| {
+                unsafe {
+                    let mut result: *mut rocksdb_t = std::ptr::null_mut();
+                    let cpp_status = roxide_rocksdb_open_column_families(
+                        options,
+                        path,
+                        num_column_families,
+                        column_family_names,
+                        column_family_options,
+                        column_family_handles,
+                        &mut result,
+                    );
+
+                    cpp_status.into_result().map(|_| result)
+                }
+            },
+        )?;
 
         Ok(Db::new(path, DbHandle::new(db_ptr), cache, db_options, cfs))
     }
@@ -117,17 +224,15 @@ impl DbOpenReadOnly for Db {
              column_family_names,
              column_family_options,
              column_family_handles| {
-                unsafe {
-                    ffi_try!(ffi::rocksdb_open_for_read_only_column_families(
-                        options,
-                        path,
-                        num_column_families,
-                        column_family_names,
-                        column_family_options,
-                        column_family_handles,
-                        fail_if_log_file_exists as u8,
-                    ))
-                }
+                Self::rocksdb_open_for_read_only_column_families(
+                    options,
+                    path,
+                    num_column_families,
+                    column_family_names,
+                    column_family_options,
+                    column_family_handles,
+                    fail_if_log_file_exists as u8,
+                )
             },
         )?;
 
@@ -185,7 +290,8 @@ impl DbOpen for TransactionDb {
                         );
                     }
 
-                    let result = ffi_try!(ffi::rocksdb_transactiondb_open_column_families(
+                    let mut result: *mut rocksdb_transactiondb_t = std::ptr::null_mut();
+                    let cpp_status = roxide_rocksdb_transactiondb_open_column_families(
                         options,
                         tx_options,
                         path,
@@ -193,7 +299,11 @@ impl DbOpen for TransactionDb {
                         column_family_names,
                         column_family_options,
                         column_family_handles,
-                    ));
+                        &mut result,
+                    );
+
+                    let result = cpp_status.into_result().map(|_| result);
+
                     ffi::rocksdb_transactiondb_options_destroy(tx_options);
 
                     result
@@ -218,7 +328,31 @@ impl DbOpen for OptimisticTransactionDb {
         O: Into<Option<DbOptions>>,
     {
         // Call the RocksDB open API and get a database object
-        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(&path, db_options, Self::ffi_open)?;
+        let (db_ptr, cache, db_options, cfs) = ffi_open_helper(
+            &path,
+            db_options,
+            |options,
+             path,
+             num_column_families,
+             column_family_names,
+             column_family_options,
+             column_family_handles| {
+                unsafe {
+                    let mut result: *mut rocksdb_optimistictransactiondb_t = std::ptr::null_mut();
+                    let cpp_status = roxide_rocksdb_optimistictransactiondb_open_column_families(
+                        options,
+                        path,
+                        num_column_families,
+                        column_family_names,
+                        column_family_options,
+                        column_family_handles,
+                        &mut result,
+                    );
+
+                    cpp_status.into_result().map(|_| result)
+                }
+            },
+        )?;
 
         Ok(OptimisticTransactionDb::new(
             path,

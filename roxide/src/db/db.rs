@@ -24,26 +24,6 @@ impl Db {
         }
         Ok(())
     }
-
-    pub(crate) fn ffi_open(
-        options: *const ffi::rocksdb_options_t,
-        path: *const libc::c_char,
-        num_column_families: libc::c_int,
-        column_family_names: *mut *const libc::c_char,
-        column_family_options: *mut *const ffi::rocksdb_options_t,
-        column_family_handles: *mut *mut ffi::rocksdb_column_family_handle_t,
-    ) -> Result<*mut ffi::rocksdb_t> {
-        unsafe {
-            ffi_try!(ffi::rocksdb_open_column_families(
-                options,
-                path,
-                num_column_families,
-                column_family_names,
-                column_family_options,
-                column_family_handles,
-            ))
-        }
-    }
 }
 
 // There are no errors that need to be post-processed for this DB type

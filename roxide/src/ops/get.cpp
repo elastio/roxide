@@ -1,6 +1,6 @@
 /** This source file is included into the Rust code using the `cpp!` macro.
  *
- * Is in support of the `get_prop.rs` module
+ * Is in support of the `get.rs` module
  */
 
 #include "src/ops/get.h"

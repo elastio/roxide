@@ -21,7 +21,7 @@ mod get_db_id;
 mod get_db_ptr;
 mod get_labels;
 mod get_prop;
-mod get_seq_num;
+pub(crate) mod get_seq_num;
 mod iterate;
 mod key_exists;
 mod live_files;

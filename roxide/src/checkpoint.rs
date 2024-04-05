@@ -5,7 +5,6 @@
 //!
 //! We use checkpoints extensively because unlike snapshots they let us operate on individual
 //! database files when we sync the database to S3.
-use crate::db;
 use crate::ffi;
 use crate::ffi_util;
 use crate::handle;
@@ -13,6 +12,7 @@ use crate::labels::DatabaseLabels;
 use crate::metrics;
 use crate::rocks_class;
 use crate::status;
+use crate::{db, Db};
 use crate::{Cache, DbOptions, Result, SstFile};
 use cheburashka::{logging::prelude::*, metrics::*};
 use lazy_static::lazy_static;
@@ -56,6 +56,12 @@ lazy_static! {
             "The number of files in the most recent checkpoint",
         )
         .unwrap();
+}
+
+/// Information about the readonly DB, opened from checkpoint files.
+pub struct CheckpointLiveInfo {
+    pub sst_files: Vec<SstFile>,
+    pub sequence_number: u64,
 }
 
 pub struct Checkpoint {
@@ -160,21 +166,21 @@ impl Checkpoint {
         self.sequence_number
     }
 
-    /// Open the checkpoint's database read-only and get all of the SST files that make up that
-    /// checkpoint.
+    /// Open the checkpoint's database read-only, get all the SST files that make up that
+    /// checkpoint and the latest sequence number.
     ///
     /// Note that this is, conceptually, equivalent to what one can achieve by using `roxide` to
     /// open the checkpoint as a regular database and then call
-    /// [`crate::GetLiveFiles::get_live_files`] on it.  However this is much better optimized
+    /// [`crate::GetLiveFiles::get_live_files`] on it.  However, this is much better optimized
     /// because it knows the checkpoint database is not being opened to be queried or written to
-    /// but just to quickly get metadata and then close.  Thus it will disable extra integrity
+    /// but just to quickly get metadata and then close.  Thus, it will disable extra integrity
     /// checks and will re-use the same cache as the live database this checkpoint came from,
     /// rather than potentially allocating another cache just for this short-lived operation.
     ///
     /// This also does not report any database-level metrics for the checkpoint, which is a big
     /// cause of <https://github.com/elastio/elastio/issues/2457>
     #[instrument(skip(self), fields(path = %self.path.display()))]
-    pub fn get_sst_files(&self) -> Result<Vec<SstFile>> {
+    pub fn get_live_info(&self) -> Result<CheckpointLiveInfo> {
         // Using the source database's options as a starting point, tune the config a bit to make
         // opening the checkpoint database as fast as it can be.  We are only opening it to call
         // `GetLiveFilesMetaData`, we won't be querying anything, we won't be writing to the
@@ -231,17 +237,15 @@ impl Checkpoint {
              column_family_names,
              column_family_options,
              column_family_handles| {
-                unsafe {
-                    ffi_try!(ffi::rocksdb_open_for_read_only_column_families(
-                        options,
-                        path,
-                        num_column_families,
-                        column_family_names,
-                        column_family_options,
-                        column_family_handles,
-                        0, // fail_if_log_file_exists = false
-                    ))
-                }
+                Db::rocksdb_open_for_read_only_column_families(
+                    options,
+                    path,
+                    num_column_families,
+                    column_family_names,
+                    column_family_options,
+                    column_family_handles,
+                    0, // fail_if_log_file_exists = false
+                )
             },
         )?;
 
@@ -253,22 +257,27 @@ impl Checkpoint {
         // database handle itself
         drop(cfs);
 
-        let live_files = unsafe {
+        let (sst_files, sequence_number) = unsafe {
             // Get the C++ `DB` pointer from the C wrapper
             let db_cpp_ptr = cpp!([db_c_ptr as "rocksdb_t*"] -> *mut libc::c_void as "rocksdb::DB*" {
                 return cast_to_db(db_c_ptr);
             });
 
-            // Query the live file metadata
-            crate::ops::get_live_files_impl(db_cpp_ptr)
+            // Query the live file metadata and latest sequence number
+            let live_sequence_number =
+                crate::ops::get_seq_num::get_latest_sequence_number_impl(db_cpp_ptr);
+            crate::ops::get_live_files_impl(db_cpp_ptr).map(|files| (files, live_sequence_number))
         }?;
 
         debug!(
-            live_files_len = live_files.len(),
+            live_files_len = sst_files.len(),
             "Got live files from checkpoint"
         );
 
-        Ok(live_files)
+        Ok(CheckpointLiveInfo {
+            sst_files,
+            sequence_number,
+        })
     }
 
     /// Update the metrics with the information about this checkpoint
@@ -573,14 +582,15 @@ mod test {
         );
 
         // Query the live files using the checkpoint
-        let checkpoint_live_files = checkpoint.get_sst_files()?;
+        let checkpoint_info = checkpoint.get_live_info()?;
 
         // Attempt to open the checkpoint read-only and get the live files that way.
         // The results should be the same.
         let checkpoint_db = Db::open_readonly(checkpoint.path(), options, false)?;
         let expected_live_files = checkpoint_db.get_live_files()?;
 
-        assert_eq!(checkpoint_live_files, expected_live_files);
+        assert_eq!(checkpoint_info.sst_files, expected_live_files);
+        assert_eq!(checkpoint_info.sequence_number, checkpoint.sequence_number);
 
         Ok(())
     }
