@@ -52,6 +52,9 @@ jobs:
     needs:
       - rust-lint
 
+    env:
+      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_TOKEN }}
+
     steps:
       # NASTY: This token must be the PAT of a user who has admin access to the repo
       # in order to bypass branch protections and commit directly to master.
