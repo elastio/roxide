@@ -13,7 +13,7 @@ use strum::AsRefStr;
 
 pub mod prelude {
     pub use super::*;
-    pub use snafu::{ensure, Backtrace, ErrorCompat, ResultExt, Snafu};
+    pub use snafu::ResultExt;
 }
 
 pub type Result<T, E = Error> = StdResult<T, E>;

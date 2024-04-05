@@ -40,6 +40,9 @@ pub(crate) struct CacheWrapper {
     pub(crate) inner: *mut ffi::rocksdb_cache_t,
 }
 
+unsafe impl Send for CacheWrapper {}
+unsafe impl Sync for CacheWrapper {}
+
 impl Drop for CacheWrapper {
     fn drop(&mut self) {
         unsafe {
@@ -98,6 +101,9 @@ pub struct Env(Arc<EnvWrapper>);
 struct EnvWrapper {
     inner: *mut ffi::rocksdb_env_t,
 }
+
+unsafe impl Send for EnvWrapper {}
+unsafe impl Sync for EnvWrapper {}
 
 impl Drop for EnvWrapper {
     fn drop(&mut self) {
