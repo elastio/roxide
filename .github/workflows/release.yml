@@ -52,10 +52,6 @@ jobs:
     needs:
       - rust-lint
 
-    env:
-      CARGO_REGISTRIES_ELASTIO_PRIVATE_CREDENTIAL_PROVIDER: cargo:token
-      CARGO_REGISTRIES_ELASTIO_PRIVATE_INDEX: "sparse+https://cargo.cloudsmith.io/elastio/private/"
-
     steps:
       # NASTY: This token must be the PAT of a user who has admin access to the repo
       # in order to bypass branch protections and commit directly to master.
@@ -79,7 +75,10 @@ jobs:
 
       - run: git config --global credential.helper store && echo https://token:${{ secrets.PRIVATE_REGISTRY_TOKEN }}@dl.cloudsmith.io > $HOME/.git-credentials
 
-      - run: cargo install xtask-core --bin cargo-xelastio --force --debug --registry elastio-private
+      - name: Install xelastio
+        uses: elastio/actions/install@v1
+        with:
+          tool: xelastio
 
       # Perform the actual release operations
       - run: cargo xelastio publish release ${{ github.event.inputs.bumpLevel }}
