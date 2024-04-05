@@ -45,7 +45,6 @@ pub mod future {
 pub use cache::Cache;
 use cheburashka::logging::prelude::*;
 pub use checkpoint::Checkpoint;
-pub use checkpoint::*;
 pub use db::*;
 pub use db_options::*;
 pub use error::{Error, Result, TransactionRetryError};
