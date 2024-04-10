@@ -46,7 +46,9 @@ uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
 bindgen = { version = "0.65", default-features = false, features = ["runtime"] }
-cc = { version = "1.0", features = ["parallel"] }
+# Patch version is pinned because of this issue which causes failing MacOS builds:
+# https://github.com/rust-lang/cc-rs/issues/1001
+cc = { version = "= 1.0.83", features = ["parallel"] }
 duct = { version = "0.13.6", optional = true }
 dunce = "1"
 glob = "0.3"
