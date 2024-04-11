@@ -1,4 +1,4 @@
-use roxide_rocksdb::{SingleThreaded, DBWithThreadMode, Options};
+use roxide_rocksdb::{DBWithThreadMode, Options, SingleThreaded};
 
 fn main() {
     let db = DBWithThreadMode::<SingleThreaded>::open_default("/path/to/dummy").unwrap();

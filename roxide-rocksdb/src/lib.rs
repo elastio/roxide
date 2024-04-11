@@ -87,11 +87,17 @@ mod db;
 mod db_iterator;
 mod db_options;
 mod db_pinnable_slice;
+mod env;
+mod iter_range;
 pub mod merge_operator;
 pub mod perf;
+mod prop_name;
+pub mod properties;
 mod slice_transform;
 mod snapshot;
 mod sst_file_writer;
+pub mod statistics;
+mod transactions;
 mod write_batch;
 
 pub use crate::{
@@ -100,31 +106,63 @@ pub use crate::{
         ColumnFamilyRef, DEFAULT_COLUMN_FAMILY_NAME,
     },
     compaction_filter::Decision as CompactionDecision,
-    db::{DBWithThreadMode, LiveFile, MultiThreaded, SingleThreaded, DB},
+    db::{
+        DBAccess, DBCommon, DBWithThreadMode, LiveFile, MultiThreaded, SingleThreaded, ThreadMode,
+        DB,
+    },
     db_iterator::{
         DBIterator, DBIteratorWithThreadMode, DBRawIterator, DBRawIteratorWithThreadMode,
         DBWALIterator, Direction, IteratorMode,
     },
     db_options::{
-        BlockBasedIndexType, BlockBasedOptions, BottommostLevelCompaction, Cache, CompactOptions,
-        DBCompactionStyle, DBCompressionType, DBPath, DBRecoveryMode, DataBlockIndexType, Env,
-        FifoCompactOptions, FlushOptions, IngestExternalFileOptions, MemtableFactory, Options,
-        PlainTableFactoryOptions, ReadOptions, UniversalCompactOptions,
-        UniversalCompactionStopStyle, WriteOptions,
+        BlockBasedIndexType, BlockBasedOptions, BottommostLevelCompaction, Cache, ChecksumType,
+        CompactOptions, CuckooTableOptions, DBCompactionStyle, DBCompressionType, DBPath,
+        DBRecoveryMode, DataBlockIndexType, FifoCompactOptions, FlushOptions,
+        IngestExternalFileOptions, KeyEncodingType, LogLevel, MemtableFactory, Options,
+        PlainTableFactoryOptions, ReadOptions, ReadTier, UniversalCompactOptions,
+        UniversalCompactionStopStyle, WaitForCompactOptions, WriteBufferManager, WriteOptions,
     },
     db_pinnable_slice::DBPinnableSlice,
+    env::Env,
+    ffi_util::CStrLike,
+    iter_range::{IterateBounds, PrefixRange},
     merge_operator::MergeOperands,
     perf::{PerfContext, PerfMetric, PerfStatsLevel},
     slice_transform::SliceTransform,
     snapshot::{Snapshot, SnapshotWithThreadMode},
     sst_file_writer::SstFileWriter,
-    write_batch::{WriteBatch, WriteBatchIterator},
+    transactions::{
+        OptimisticTransactionDB, OptimisticTransactionOptions, Transaction, TransactionDB,
+        TransactionDBOptions, TransactionOptions,
+    },
+    write_batch::{WriteBatch, WriteBatchIterator, WriteBatchWithTransaction},
 };
 
 use roxide_librocksdb_sys as ffi;
 
 use std::error;
 use std::fmt;
+
+/// RocksDB error kind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorKind {
+    NotFound,
+    Corruption,
+    NotSupported,
+    InvalidArgument,
+    IOError,
+    MergeInProgress,
+    Incomplete,
+    ShutdownInProgress,
+    TimedOut,
+    Aborted,
+    Busy,
+    Expired,
+    TryAgain,
+    CompactionTooLarge,
+    ColumnFamilyDropped,
+    Unknown,
+}
 
 /// A simple wrapper round a string, used for errors reported from
 /// ffi calls.
@@ -140,6 +178,28 @@ impl Error {
 
     pub fn into_string(self) -> String {
         self.into()
+    }
+
+    /// Parse corresponding [`ErrorKind`] from error message.
+    pub fn kind(&self) -> ErrorKind {
+        match self.message.split(':').next().unwrap_or("") {
+            "NotFound" => ErrorKind::NotFound,
+            "Corruption" => ErrorKind::Corruption,
+            "Not implemented" => ErrorKind::NotSupported,
+            "Invalid argument" => ErrorKind::InvalidArgument,
+            "IO error" => ErrorKind::IOError,
+            "Merge in progress" => ErrorKind::MergeInProgress,
+            "Result incomplete" => ErrorKind::Incomplete,
+            "Shutdown in progress" => ErrorKind::ShutdownInProgress,
+            "Operation timed out" => ErrorKind::TimedOut,
+            "Operation aborted" => ErrorKind::Aborted,
+            "Resource busy" => ErrorKind::Busy,
+            "Operation expired" => ErrorKind::Expired,
+            "Operation failed. Try again." => ErrorKind::TryAgain,
+            "Compaction too large" => ErrorKind::CompactionTooLarge,
+            "Column family dropped" => ErrorKind::ColumnFamilyDropped,
+            _ => ErrorKind::Unknown,
+        }
     }
 }
 
@@ -169,10 +229,18 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        OptimisticTransactionDB, OptimisticTransactionOptions, Transaction, TransactionDB,
+        TransactionDBOptions, TransactionOptions,
+    };
+
     use super::{
-        BlockBasedOptions, BoundColumnFamily, ColumnFamily, ColumnFamilyDescriptor, DBIterator,
-        DBRawIterator, IngestExternalFileOptions, Options, PlainTableFactoryOptions, ReadOptions,
-        Snapshot, SstFileWriter, WriteBatch, WriteOptions, DB,
+        column_family::UnboundColumnFamily,
+        db_options::{CacheWrapper, WriteBufferManagerWrapper},
+        env::{Env, EnvWrapper},
+        BlockBasedOptions, BoundColumnFamily, Cache, ColumnFamily, ColumnFamilyDescriptor,
+        DBIterator, DBRawIterator, IngestExternalFileOptions, Options, PlainTableFactoryOptions,
+        ReadOptions, Snapshot, SstFileWriter, WriteBatch, WriteBufferManager, WriteOptions, DB,
     };
 
     #[test]
@@ -197,8 +265,21 @@ mod test {
         is_send::<ColumnFamilyDescriptor>();
         is_send::<ColumnFamily>();
         is_send::<BoundColumnFamily<'_>>();
+        is_send::<UnboundColumnFamily>();
         is_send::<SstFileWriter>();
         is_send::<WriteBatch>();
+        is_send::<Cache>();
+        is_send::<CacheWrapper>();
+        is_send::<Env>();
+        is_send::<EnvWrapper>();
+        is_send::<TransactionDB>();
+        is_send::<OptimisticTransactionDB>();
+        is_send::<Transaction<'_, TransactionDB>>();
+        is_send::<TransactionDBOptions>();
+        is_send::<OptimisticTransactionOptions>();
+        is_send::<TransactionOptions>();
+        is_send::<WriteBufferManager>();
+        is_send::<WriteBufferManagerWrapper>();
     }
 
     #[test]
@@ -217,7 +298,19 @@ mod test {
         is_sync::<IngestExternalFileOptions>();
         is_sync::<BlockBasedOptions>();
         is_sync::<PlainTableFactoryOptions>();
+        is_sync::<UnboundColumnFamily>();
         is_sync::<ColumnFamilyDescriptor>();
         is_sync::<SstFileWriter>();
+        is_sync::<Cache>();
+        is_sync::<CacheWrapper>();
+        is_sync::<Env>();
+        is_sync::<EnvWrapper>();
+        is_sync::<TransactionDB>();
+        is_sync::<OptimisticTransactionDB>();
+        is_sync::<TransactionDBOptions>();
+        is_sync::<OptimisticTransactionOptions>();
+        is_sync::<TransactionOptions>();
+        is_sync::<WriteBufferManager>();
+        is_sync::<WriteBufferManagerWrapper>();
     }
 }

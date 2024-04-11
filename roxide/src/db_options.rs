@@ -843,7 +843,7 @@ impl DbOptions {
                         let full =
                             move |key: &[u8],
                                   existing_value: Option<&[u8]>,
-                                  operands: &mut crate::MergeOperands| {
+                                  operands: &crate::MergeOperands| {
                                 full(key, existing_value, operands)
                             };
                         if let Some(partial) = partial {
@@ -851,7 +851,7 @@ impl DbOptions {
                             // fn
                             let partial = move |key: &[u8],
                                                 existing_value: Option<&[u8]>,
-                                                operands: &mut crate::MergeOperands| {
+                                                operands: &crate::MergeOperands| {
                                 partial(key, existing_value, operands)
                             };
                             cf_opts.set_merge_operator(&operator_name, full, partial);
