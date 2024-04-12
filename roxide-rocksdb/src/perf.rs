@@ -122,7 +122,7 @@ pub fn set_perf_stats(lvl: PerfStatsLevel) {
 /// Thread local context for gathering performance counter efficiently
 /// and transparently.
 pub struct PerfContext {
-    pub inner: *mut ffi::rocksdb_perfcontext_t,
+    pub(crate) inner: *mut ffi::rocksdb_perfcontext_t,
 }
 
 impl Default for PerfContext {

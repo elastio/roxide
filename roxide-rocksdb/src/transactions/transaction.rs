@@ -29,7 +29,7 @@ use libc::{c_char, c_void, size_t};
 /// [`TransactionDB`]: crate::TransactionDB
 /// [`OptimisticTransactionDB`]: crate::OptimisticTransactionDB
 pub struct Transaction<'db, DB> {
-    pub inner: *mut ffi::rocksdb_transaction_t,
+    pub(crate) inner: *mut ffi::rocksdb_transaction_t,
     pub(crate) _marker: PhantomData<&'db DB>,
 }
 

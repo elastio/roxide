@@ -331,7 +331,7 @@ pub struct WriteOptions {
 /// let _ = DB::destroy(&Options::default(), path);
 /// ```
 pub struct FlushOptions {
-    pub inner: *mut ffi::rocksdb_flushoptions_t,
+    pub(crate) inner: *mut ffi::rocksdb_flushoptions_t,
 }
 
 /// For configuring block-based file storage.
@@ -348,7 +348,7 @@ pub struct ReadOptions {
 
 /// Configuration of cuckoo-based storage.
 pub struct CuckooTableOptions {
-    pub inner: *mut ffi::rocksdb_cuckoo_table_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_cuckoo_table_options_t,
 }
 
 /// For configuring external files ingestion.
@@ -376,7 +376,7 @@ pub struct CuckooTableOptions {
 /// let _ = DB::destroy(&Options::default(), path);
 /// ```
 pub struct IngestExternalFileOptions {
-    pub inner: *mut ffi::rocksdb_ingestexternalfileoptions_t,
+    pub(crate) inner: *mut ffi::rocksdb_ingestexternalfileoptions_t,
 }
 
 // Safety note: auto-implementing Send on most db-related types is prevented by the inner FFI
@@ -3976,7 +3976,7 @@ pub enum DBRecoveryMode {
 }
 
 pub struct FifoCompactOptions {
-    pub inner: *mut ffi::rocksdb_fifo_compaction_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_fifo_compaction_options_t,
 }
 
 impl Default for FifoCompactOptions {
@@ -4021,7 +4021,7 @@ pub enum UniversalCompactionStopStyle {
 }
 
 pub struct UniversalCompactOptions {
-    pub inner: *mut ffi::rocksdb_universal_compaction_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_universal_compaction_options_t,
 }
 
 impl Default for UniversalCompactOptions {
@@ -4206,7 +4206,7 @@ impl CompactOptions {
 }
 
 pub struct WaitForCompactOptions {
-    pub inner: *mut ffi::rocksdb_wait_for_compact_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_wait_for_compact_options_t,
 }
 
 impl Default for WaitForCompactOptions {
@@ -4266,7 +4266,7 @@ impl WaitForCompactOptions {
 
 /// Represents a path where sst files can be put into
 pub struct DBPath {
-    pub inner: *mut ffi::rocksdb_dbpath_t,
+    pub(crate) inner: *mut ffi::rocksdb_dbpath_t,
 }
 
 impl DBPath {

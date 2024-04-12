@@ -734,7 +734,7 @@ iterable_named_enum! {
 }
 
 pub struct HistogramData {
-    pub inner: *mut ffi::rocksdb_statistics_histogram_data_t,
+    pub(crate) inner: *mut ffi::rocksdb_statistics_histogram_data_t,
 }
 
 impl HistogramData {

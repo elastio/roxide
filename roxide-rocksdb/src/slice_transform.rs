@@ -24,7 +24,7 @@ use crate::{ffi, ffi_util::CStrLike};
 /// to store prefix blooms by setting prefix_extractor in
 /// ColumnFamilyOptions.
 pub struct SliceTransform {
-    pub inner: *mut ffi::rocksdb_slicetransform_t,
+    pub(crate) inner: *mut ffi::rocksdb_slicetransform_t,
 }
 
 // NB we intentionally don't implement a Drop that passes

@@ -51,7 +51,7 @@ impl ColumnFamilyDescriptor {
 /// An opaque type used to represent a column family. Returned from some functions, and used
 /// in others
 pub struct ColumnFamily {
-    pub inner: *mut ffi::rocksdb_column_family_handle_t,
+    pub(crate) inner: *mut ffi::rocksdb_column_family_handle_t,
 }
 
 /// A specialized opaque type used to represent a column family by the [`MultiThreaded`]
@@ -60,7 +60,7 @@ pub struct ColumnFamily {
 /// iterators/snapshots. On top of it, this is as cheap and small as `&ColumnFamily` because
 /// this only has a single pointer-wide field.
 pub struct BoundColumnFamily<'a> {
-    pub inner: *mut ffi::rocksdb_column_family_handle_t,
+    pub(crate) inner: *mut ffi::rocksdb_column_family_handle_t,
     pub(crate) multi_threaded_cfs: std::marker::PhantomData<&'a MultiThreaded>,
 }
 
@@ -69,7 +69,7 @@ pub struct BoundColumnFamily<'a> {
 // ColumnFamily's lifetime should be bound to DB. But, db holds cfs and cfs can't easily
 // self-reference DB as its lifetime due to rust's type system
 pub(crate) struct UnboundColumnFamily {
-    pub inner: *mut ffi::rocksdb_column_family_handle_t,
+    pub(crate) inner: *mut ffi::rocksdb_column_family_handle_t,
 }
 
 impl UnboundColumnFamily {

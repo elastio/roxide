@@ -69,7 +69,7 @@ type DefaultThreadMode = crate::MultiThreaded;
 ///
 /// [`SingleThreaded`]: crate::SingleThreaded
 pub struct TransactionDB<T: ThreadMode = DefaultThreadMode> {
-    pub inner: *mut ffi::rocksdb_transactiondb_t,
+    pub(crate) inner: *mut ffi::rocksdb_transactiondb_t,
     cfs: T,
     path: PathBuf,
     // prepared 2pc transactions.

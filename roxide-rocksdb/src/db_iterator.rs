@@ -516,7 +516,7 @@ impl<'a, D: DBAccess> Into<DBRawIteratorWithThreadMode<'a, D>> for DBIteratorWit
 /// value is the sequence number of the associated write batch.
 ///
 pub struct DBWALIterator {
-    pub inner: *mut ffi::rocksdb_wal_iterator_t,
+    pub(crate) inner: *mut ffi::rocksdb_wal_iterator_t,
     pub(crate) start_seq_number: u64,
 }
 

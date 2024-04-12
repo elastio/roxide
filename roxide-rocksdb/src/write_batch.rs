@@ -46,7 +46,7 @@ pub type WriteBatch = WriteBatchWithTransaction<false>;
 ///
 /// [`Transaction`]: crate::Transaction
 pub struct WriteBatchWithTransaction<const TRANSACTION: bool> {
-    pub inner: *mut ffi::rocksdb_writebatch_t,
+    pub(crate) inner: *mut ffi::rocksdb_writebatch_t,
 }
 
 /// Receives the puts and deletes of a write batch.

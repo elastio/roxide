@@ -16,7 +16,7 @@
 use crate::ffi;
 
 pub struct TransactionOptions {
-    pub inner: *mut ffi::rocksdb_transaction_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_transaction_options_t,
 }
 
 unsafe impl Send for TransactionOptions {}
@@ -137,7 +137,7 @@ impl Drop for TransactionOptions {
 }
 
 pub struct TransactionDBOptions {
-    pub inner: *mut ffi::rocksdb_transactiondb_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_transactiondb_options_t,
 }
 
 unsafe impl Send for TransactionDBOptions {}
@@ -237,7 +237,7 @@ impl Drop for TransactionDBOptions {
 }
 
 pub struct OptimisticTransactionOptions {
-    pub inner: *mut ffi::rocksdb_optimistictransaction_options_t,
+    pub(crate) inner: *mut ffi::rocksdb_optimistictransaction_options_t,
 }
 
 unsafe impl Send for OptimisticTransactionOptions {}
