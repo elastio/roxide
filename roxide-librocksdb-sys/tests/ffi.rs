@@ -23,7 +23,7 @@
     unused_variables
 )]
 // clippy was never run on the rust-rocksdb code, and once it was brought into the same repo with
-// `roxide` issues appeared.  It's not a good use of time to fix this third-party code now
+// `roxide` issues appeared. It's not a good use of time to fix this third-party code now
 #![allow(clippy::all)]
 
 use const_cstr::const_cstr;
@@ -33,7 +33,6 @@ use std::borrow::Cow;
 use std::env;
 use std::ffi::{CStr, CString};
 use std::io::Write;
-use std::mem;
 use std::path::PathBuf;
 use std::ptr;
 use std::slice;
@@ -225,11 +224,9 @@ unsafe extern "C" fn CmpName(arg: *mut c_void) -> *const c_char {
     cstrp!("foo")
 }
 
-// Custom filter policy
+// Custom compaction filter
 
 static mut fake_filter_result: c_uchar = 1;
-
-// Custom compaction filter
 
 unsafe extern "C" fn CFilterDestroy(arg: *mut c_void) {}
 
@@ -250,15 +247,15 @@ unsafe extern "C" fn CFilterFilter(
 ) -> c_uchar {
     if key_length == 3 {
         if memcmp(
-            mem::transmute(key),
-            mem::transmute(cstrp!("bar")),
+            key.cast::<c_void>(),
+            cstrp!("bar").cast::<c_void>(),
             key_length,
         ) == 0
         {
             return 1;
         } else if memcmp(
-            mem::transmute(key),
-            mem::transmute(cstrp!("baz")),
+            key.cast::<c_void>(),
+            cstrp!("baz").cast::<c_void>(),
             key_length,
         ) == 0
         {
@@ -440,10 +437,10 @@ fn ffi() {
         rocksdb_block_based_options_set_block_cache(table_options, cache);
         rocksdb_options_set_block_based_table_factory(options, table_options);
 
-        let no_compression = rocksdb_no_compression;
-        rocksdb_options_set_compression(options, no_compression as i32);
+        let no_compression = rocksdb_no_compression as c_int;
+        rocksdb_options_set_compression(options, no_compression);
         rocksdb_options_set_compression_options(options, -14, -1, 0, 0);
-        let compression_levels = vec![
+        let mut compression_levels = vec![
             no_compression,
             no_compression,
             no_compression,
@@ -451,7 +448,7 @@ fn ffi() {
         ];
         rocksdb_options_set_compression_per_level(
             options,
-            mem::transmute(compression_levels.as_ptr()),
+            compression_levels.as_mut_ptr(),
             compression_levels.len() as size_t,
         );
 
@@ -567,7 +564,7 @@ fn ffi() {
             let mut pos: c_int = 0;
             rocksdb_writebatch_iterate(
                 wb,
-                mem::transmute(&mut pos),
+                (&mut pos as *mut c_int).cast::<c_void>(),
                 Some(CheckPut),
                 Some(CheckDel),
             );
@@ -757,13 +754,8 @@ fn ffi() {
 
         StartPhase("filter");
         for run in 0..2 {
-            // First run uses default filter, second run uses bloom filter
             CheckNoError!(err);
-            let mut policy: *mut rocksdb_filterpolicy_t = if run == 0 {
-                ptr::null_mut()
-            } else {
-                rocksdb_filterpolicy_create_bloom(10.0)
-            };
+            let mut policy: *mut rocksdb_filterpolicy_t = rocksdb_filterpolicy_create_bloom(10.0);
 
             rocksdb_block_based_options_set_filter_policy(table_options, policy);
 
@@ -1083,7 +1075,7 @@ fn ffi() {
                 rocksdb_slicetransform_create_fixed_prefix(3),
             );
             rocksdb_options_set_hash_skip_list_rep(options, 5000, 4, 4);
-            rocksdb_options_set_plain_table_factory(options, 4, 10, 0.75, 16);
+            rocksdb_options_set_plain_table_factory(options, 4, 10, 0.75, 16, 0, 0, 0, 0);
             rocksdb_options_set_allow_concurrent_memtable_write(options, 0);
 
             db = rocksdb_open(options, dbname, &mut err);

@@ -16,25 +16,36 @@ use crate::{ffi, AsColumnFamilyRef};
 use libc::{c_char, c_void, size_t};
 use std::slice;
 
+/// A type alias to keep compatibility. See [`WriteBatchWithTransaction`] for details
+pub type WriteBatch = WriteBatchWithTransaction<false>;
+
 /// An atomic batch of write operations.
+///
+/// [`delete_range`](#method.delete_range) is not supported in [`Transaction`].
 ///
 /// Making an atomic commit of several writes:
 ///
 /// ```
-/// use roxide_rocksdb::{DB, Options, WriteBatch};
+/// use roxide_rocksdb::{DB, Options, WriteBatchWithTransaction};
 ///
 /// let path = "_path_for_rocksdb_storage1";
 /// {
 ///     let db = DB::open_default(path).unwrap();
-///     let mut batch = WriteBatch::default();
+///     let mut batch = WriteBatchWithTransaction::<false>::default();
 ///     batch.put(b"my key", b"my value");
 ///     batch.put(b"key2", b"value2");
 ///     batch.put(b"key3", b"value3");
+///
+///     // delete_range is supported when use without transaction
+///     batch.delete_range(b"key2", b"key3");
+///
 ///     db.write(batch); // Atomically commits the batch
 /// }
 /// let _ = DB::destroy(&Options::default(), path);
 /// ```
-pub struct WriteBatch {
+///
+/// [`Transaction`]: crate::Transaction
+pub struct WriteBatchWithTransaction<const TRANSACTION: bool> {
     pub(crate) inner: *mut ffi::rocksdb_writebatch_t,
 }
 
@@ -77,7 +88,21 @@ unsafe extern "C" fn writebatch_delete_callback(state: *mut c_void, k: *const c_
     leaked_cb.delete(key.to_vec().into_boxed_slice());
 }
 
-impl WriteBatch {
+impl<const TRANSACTION: bool> WriteBatchWithTransaction<TRANSACTION> {
+    /// Construct with a reference to a byte array serialized by [`WriteBatch`].
+    pub fn from_data(data: &[u8]) -> Self {
+        unsafe {
+            let ptr = data.as_ptr();
+            let len = data.len();
+            Self {
+                inner: ffi::rocksdb_writebatch_create_from(
+                    ptr as *const libc::c_char,
+                    len as size_t,
+                ),
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
         unsafe { ffi::rocksdb_writebatch_count(self.inner) as usize }
     }
@@ -88,6 +113,15 @@ impl WriteBatch {
             let mut batch_size: size_t = 0;
             ffi::rocksdb_writebatch_data(self.inner, &mut batch_size);
             batch_size
+        }
+    }
+
+    /// Return a reference to a byte array which represents a serialized version of the batch.
+    pub fn data(&self) -> &[u8] {
+        unsafe {
+            let mut batch_size: size_t = 0;
+            let batch_data = ffi::rocksdb_writebatch_data(self.inner, &mut batch_size);
+            std::slice::from_raw_parts(batch_data as _, batch_size)
         }
     }
 
@@ -134,7 +168,7 @@ impl WriteBatch {
         }
     }
 
-    pub fn put_cf<K, V>(&mut self, cf: impl AsColumnFamilyRef, key: K, value: V)
+    pub fn put_cf<K, V>(&mut self, cf: &impl AsColumnFamilyRef, key: K, value: V)
     where
         K: AsRef<[u8]>,
         V: AsRef<[u8]>,
@@ -173,7 +207,7 @@ impl WriteBatch {
         }
     }
 
-    pub fn merge_cf<K, V>(&mut self, cf: impl AsColumnFamilyRef, key: K, value: V)
+    pub fn merge_cf<K, V>(&mut self, cf: &impl AsColumnFamilyRef, key: K, value: V)
     where
         K: AsRef<[u8]>,
         V: AsRef<[u8]>,
@@ -206,7 +240,7 @@ impl WriteBatch {
         }
     }
 
-    pub fn delete_cf<K: AsRef<[u8]>>(&mut self, cf: impl AsColumnFamilyRef, key: K) {
+    pub fn delete_cf<K: AsRef<[u8]>>(&mut self, cf: &impl AsColumnFamilyRef, key: K) {
         let key = key.as_ref();
 
         unsafe {
@@ -219,6 +253,15 @@ impl WriteBatch {
         }
     }
 
+    /// Clear all updates buffered in this batch.
+    pub fn clear(&mut self) {
+        unsafe {
+            ffi::rocksdb_writebatch_clear(self.inner);
+        }
+    }
+}
+
+impl WriteBatchWithTransaction<false> {
     /// Remove database entries from start key to end key.
     ///
     /// Removes the database entries in the range ["begin_key", "end_key"), i.e.,
@@ -243,7 +286,7 @@ impl WriteBatch {
     /// Removes the database entries in the range ["begin_key", "end_key"), i.e.,
     /// including "begin_key" and excluding "end_key". It is not an error if no
     /// keys exist in the range ["begin_key", "end_key").
-    pub fn delete_range_cf<K: AsRef<[u8]>>(&mut self, cf: impl AsColumnFamilyRef, from: K, to: K) {
+    pub fn delete_range_cf<K: AsRef<[u8]>>(&mut self, cf: &impl AsColumnFamilyRef, from: K, to: K) {
         let (start_key, end_key) = (from.as_ref(), to.as_ref());
 
         unsafe {
@@ -257,27 +300,22 @@ impl WriteBatch {
             );
         }
     }
-
-    /// Clear all updates buffered in this batch.
-    pub fn clear(&mut self) {
-        unsafe {
-            ffi::rocksdb_writebatch_clear(self.inner);
-        }
-    }
 }
 
-impl Default for WriteBatch {
-    fn default() -> WriteBatch {
-        WriteBatch {
+impl<const TRANSACTION: bool> Default for WriteBatchWithTransaction<TRANSACTION> {
+    fn default() -> Self {
+        Self {
             inner: unsafe { ffi::rocksdb_writebatch_create() },
         }
     }
 }
 
-impl Drop for WriteBatch {
+impl<const TRANSACTION: bool> Drop for WriteBatchWithTransaction<TRANSACTION> {
     fn drop(&mut self) {
-        unsafe { ffi::rocksdb_writebatch_destroy(self.inner) }
+        unsafe {
+            ffi::rocksdb_writebatch_destroy(self.inner);
+        }
     }
 }
 
-unsafe impl Send for WriteBatch {}
+unsafe impl<const TRANSACTION: bool> Send for WriteBatchWithTransaction<TRANSACTION> {}

@@ -6,9 +6,7 @@ use crate::db::{self, db::*, opt_txdb::*, txdb::*};
 use crate::db_options::ReadOptions;
 use crate::ffi;
 use crate::handle::{self, RocksObject, RocksObjectDefault};
-use crate::iterator::{
-    DbRangeIterator, RocksIterator, TransactionRangeIterator, UnboundedIterator,
-};
+use crate::iterator::{DbRangeIterator, RocksIterator, UnboundedIterator};
 use crate::tx::{sync, unsync};
 use crate::{Error, Result};
 use std::ptr;
@@ -652,16 +650,15 @@ impl<T: Sync + IterateInternal<InternalPrefixIter = UnboundedIterator>> IterateP
 }
 
 // The RocksDB transaction impl has the same API and takes the same options as the DB impl, but it
-// doesn't properly implement either range (https://github.com/facebook/rocksdb/issues/2343) or
-// prefix (https://github.com/facebook/rocksdb/issues/5100) iteration.
+// doesn't properly implement prefix (https://github.com/facebook/rocksdb/issues/5100) iteration.
 
 /// Unsync (that is not thread safe) transactions support `IterateAll` with an `UnboundedIterator`,
-/// and `IterateRange` with the polyfill `TransactionRangeIterator`.  Prefix iteration is not
+/// and `IterateRange` with `DbRangeIterator`.  Prefix iteration is not
 /// possible, because we have no way to invoke the prefix extractor from Rust in order to implement
 /// a prefix extract polyfill
 impl IterateInternal for unsync::Transaction {
     // Range iterator uses a Rust polyfill implementation
-    type InternalRangeIter = TransactionRangeIterator;
+    type InternalRangeIter = DbRangeIterator;
 
     // Prefix iteration not supported at all
     // TODO: once stabilized this should be the `!` type
@@ -685,27 +682,6 @@ impl IterateInternal for unsync::Transaction {
 /// The defautl impl of `IterateAll` is sufficient, because it defaults to using `iterate_all` for
 /// iterating with a prefix hint
 impl IterateAll for unsync::Transaction {}
-
-/// Implement IterateRange for all the unsync Transaction impl that uses the
-/// `TransactionRangeIterator` polyfill.  This works by doing an iterate_all, then putting another
-/// layer on top that internally implements the range limit
-impl IterateRange for unsync::Transaction {
-    type RangeIter = TransactionRangeIterator;
-
-    fn iterate_range<K: BinaryStr>(
-        &self,
-        cf: &impl db::ColumnFamilyLike,
-        options: impl Into<Option<ReadOptions>>,
-        key_range: impl Into<OpenKeyRange<K>>,
-    ) -> Result<Self::RangeIter> {
-        let unbounded_iter = self.iterate_all(cf, options)?;
-
-        Ok(TransactionRangeIterator::new(
-            unbounded_iter,
-            key_range.into().to_owned(),
-        ))
-    }
-}
 
 // The implementation for the thread-safe `Transaction` is just a wrapper around the
 // `unsync::Transaction` implementation so it takes a rather different form.
@@ -752,40 +728,6 @@ impl IterateInternal for sync::Transaction {
 }
 
 impl IterateAll for sync::Transaction {}
-
-impl IterateRange for sync::Transaction {
-    type RangeIter = TransactionRangeIterator;
-
-    fn iterate_range<K: BinaryStr>(
-        &self,
-        cf: &impl db::ColumnFamilyLike,
-        options: impl Into<Option<ReadOptions>>,
-        key_range: impl Into<OpenKeyRange<K>>,
-    ) -> Result<Self::RangeIter> {
-        self.with_tx(move |tx| tx.iterate_range(cf, options, key_range))
-    }
-
-    fn async_iterate_range<K: BinaryStr + Send + 'static>(
-        &self,
-        cf: &impl db::ColumnFamilyLike,
-        options: impl Into<Option<ReadOptions>>,
-        key_range: impl Into<OpenKeyRange<K>>,
-    ) -> op_metrics::AsyncOpFuture<Self::RangeIter>
-    where
-        <Self as RocksOpBase>::HandleType: Sync,
-    {
-        op_metrics::instrument_async_cf_op(
-            cf,
-            op_metrics::ColumnFamilyOperation::AsyncWrapper,
-            move |_reporter| {
-                let cf = cf.clone();
-                let options = options.into();
-                let key_range = key_range.into();
-                self.async_with_tx(move |tx| tx.iterate_range(&cf, options, key_range))
-            },
-        )
-    }
-}
 
 #[cfg(test)]
 mod test {

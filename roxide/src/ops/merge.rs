@@ -410,7 +410,7 @@ mod test {
     fn test_merge(
         _new_key: &[u8],
         existing_val: Option<&[u8]>,
-        operands: &mut MergeOperands,
+        operands: &MergeOperands,
     ) -> Option<Vec<u8>> {
         // eprintln!("test_merge: existing_val={:#?} operands={:#?}", existing_val, operands.size_hint());
 

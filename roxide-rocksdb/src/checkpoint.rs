@@ -17,10 +17,8 @@
 //!
 //! [1]: https://github.com/facebook/rocksdb/wiki/Checkpoints
 
-use crate::{ffi, Error, DB};
-use std::ffi::CString;
-use std::marker::PhantomData;
-use std::path::Path;
+use crate::{db::DBInner, ffi, ffi_util::to_cpath, DBCommon, Error, ThreadMode};
+use std::{marker::PhantomData, path::Path};
 
 /// Undocumented parameter for `ffi::rocksdb_checkpoint_create` function. Zero by default.
 const LOG_SIZE_FOR_FLUSH: u64 = 0_u64;
@@ -37,16 +35,18 @@ impl<'db> Checkpoint<'db> {
     ///
     /// Does not actually produce checkpoints, call `.create_checkpoint()` method to produce
     /// a DB checkpoint.
-    pub fn new(db: &'db DB) -> Result<Checkpoint<'db>, Error> {
+    pub fn new<T: ThreadMode, I: DBInner>(db: &'db DBCommon<T, I>) -> Result<Self, Error> {
         let checkpoint: *mut ffi::rocksdb_checkpoint_t;
 
-        unsafe { checkpoint = ffi_try!(ffi::rocksdb_checkpoint_object_create(db.inner)) };
+        unsafe {
+            checkpoint = ffi_try!(ffi::rocksdb_checkpoint_object_create(db.inner.inner()));
+        }
 
         if checkpoint.is_null() {
             return Err(Error::new("Could not create checkpoint object.".to_owned()));
         }
 
-        Ok(Checkpoint {
+        Ok(Self {
             inner: checkpoint,
             _db: PhantomData,
         })
@@ -54,24 +54,15 @@ impl<'db> Checkpoint<'db> {
 
     /// Creates new physical DB checkpoint in directory specified by `path`.
     pub fn create_checkpoint<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let path = path.as_ref();
-        let cpath = if let Ok(c) = CString::new(path.to_string_lossy().as_bytes()) {
-            c
-        } else {
-            return Err(Error::new(
-                "Failed to convert path to CString when creating DB checkpoint".to_owned(),
-            ));
-        };
-
+        let cpath = to_cpath(path)?;
         unsafe {
             ffi_try!(ffi::rocksdb_checkpoint_create(
                 self.inner,
                 cpath.as_ptr(),
                 LOG_SIZE_FOR_FLUSH,
             ));
-
-            Ok(())
         }
+        Ok(())
     }
 }
 

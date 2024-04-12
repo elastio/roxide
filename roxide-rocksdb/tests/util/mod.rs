@@ -1,14 +1,11 @@
-// clippy was never run on the rust-rocksdb code, and once it was brought into the same repo with
-// `roxide` issues appeared.  It's not a good use of time to fix this third-party code now
-#![allow(clippy::all)]
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
-use roxide_rocksdb::{Options, DB};
+use roxide_rocksdb::{Error, Options, DB};
 
 /// Temporary database path which calls DB::Destroy when DBPath is dropped.
 pub struct DBPath {
-    #[allow(dead_code)]
     dir: tempfile::TempDir, // kept for cleaning up during drop
     path: PathBuf,
 }
@@ -41,4 +38,23 @@ impl AsRef<Path> for &DBPath {
     fn as_ref(&self) -> &Path {
         &self.path
     }
+}
+
+type Pair = (Box<[u8]>, Box<[u8]>);
+
+pub fn pair(left: &[u8], right: &[u8]) -> Pair {
+    (Box::from(left), Box::from(right))
+}
+
+#[track_caller]
+pub fn assert_iter(iter: impl Iterator<Item = Result<Pair, Error>>, want: &[Pair]) {
+    let got = iter.collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(got.as_slice(), want);
+}
+
+#[track_caller]
+pub fn assert_iter_reversed(iter: impl Iterator<Item = Result<Pair, Error>>, want: &[Pair]) {
+    let mut got = iter.collect::<Result<Vec<_>, _>>().unwrap();
+    got.reverse();
+    assert_eq!(got.as_slice(), want);
 }
