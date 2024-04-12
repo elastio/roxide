@@ -3575,7 +3575,7 @@ impl ReadOptions {
     /// supported.  For example:
     ///
     /// ```
-    /// let mut options = rocksdb::ReadOptions::default();
+    /// let mut options = roxide_rocksdb::ReadOptions::default();
     /// options.set_iterate_range("xy".as_bytes().."xz".as_bytes());
     /// ```
     ///
@@ -3584,7 +3584,7 @@ impl ReadOptions {
     /// equivalent to:
     ///
     /// ```
-    /// let mut options = rocksdb::ReadOptions::default();
+    /// let mut options = roxide_rocksdb::ReadOptions::default();
     /// options.set_iterate_range(rocksdb::PrefixRange("xy".as_bytes()));
     /// ```
     ///
@@ -3597,7 +3597,7 @@ impl ReadOptions {
     /// bounds can be reset by setting the range to `..` as in:
     ///
     /// ```
-    /// let mut options = rocksdb::ReadOptions::default();
+    /// let mut options = roxide_rocksdb::ReadOptions::default();
     /// options.set_iterate_range(..);
     /// ```
     pub fn set_iterate_range(&mut self, range: impl crate::IterateBounds) {
