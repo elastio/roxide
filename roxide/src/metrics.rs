@@ -144,7 +144,6 @@ lazy_static! {
         // Block metrics
         ("rocksdb.number.block.compressed", "Number of block compressions"),
         ("rocksdb.number.block.decompressed", "Number of block decompressions"),
-        ("rocksdb.number.block.not_compressed", "Number of blocks not compressed"),
 
         // Key metrics
         ("rocksdb.number.keys.read", "Number of keys read"),
@@ -178,9 +177,9 @@ lazy_static! {
         ("rocksdb.error.handler.autoresume.count", "Description TBD"),
         ("rocksdb.error.handler.autoresume.retry.total.count", "Description TBD"),
         ("rocksdb.error.handler.autoresume.success.count", "Description TBD"),
-        ("rocksdb.error.handler.bg.errro.count", "Background error count"),
-        ("rocksdb.error.handler.bg.io.errro.count", "Background I/O error count (subset of bg.errno.count)"),
-        ("rocksdb.error.handler.bg.retryable.io.errro.count", "Background retryable I/O error count (subset of bg.retryable.io.errro.count)"),
+        ("rocksdb.error.handler.bg.error.count", "Background error count"),
+        ("rocksdb.error.handler.bg.io.error.count", "Background I/O error count (subset of bg.errno.count)"),
+        ("rocksdb.error.handler.bg.retryable.io.error.count", "Background retryable I/O error count (subset of bg.retryable.io.errro.count)"),
         ("rocksdb.filter.operation.time.nanos", "Description TBD"),
         ("rocksdb.getupdatessince.calls", "Description TBD"),
         ("rocksdb.merge.operation.time.nanos", "Description TBD"),
@@ -205,7 +204,7 @@ lazy_static! {
     /// of all available tickers.
     ///
     /// Technically, a RocksDB "ticker" is like a prometheus "Counter", in that they are
-    /// monotonically increasing values.  However there's no way to set the value of a counter,
+    /// monotonically increasing values.  However, there's no way to set the value of a counter,
     /// only to increment it, which would require we first get the counter value (incurring a lock
     /// and memory access), compute the difference with the new value, then increment by the
     /// difference.  That's overhead that's not worth paying.
