@@ -35,12 +35,6 @@
 //! internally, the only difference is that is holds onto the memory containing the range keys for
 //! the life of the iterator so Rocks will be able to access that memory for the life of the
 //! iterator.
-//!
-//! * [`TransactionRangeIterator`] - Implements range iteration for a transaction by detecting when
-//! the iterator has advanced outside of the range of keys specified at iterator creation time.
-//! This isn't nearly as efficient as Rocks doing this internally, but it allows higher-level code
-//! to support either transactions or transactionless operations, getting a performance boost if
-//! transactions aren't used.
 
 use crate::error::prelude::*;
 use crate::ffi;
@@ -331,120 +325,6 @@ impl Drop for DbRangeIterator {
     }
 }
 
-/// An iterator over a range of keys in a RocksDB column family within a transaction
-///
-/// Since Rocks doesn't support range iteration on a transaction natively
-/// (<https://github.com/facebook/rocksdb/issues/2343>), it must be implemented manually.  That's not
-/// nearly as performant as doing it at the rocks level; hopefully someday they get around to
-/// implementing this properly.
-pub struct TransactionRangeIterator {
-    inner: UnboundedIterator,
-    range: OpenKeyRange<Vec<u8>>,
-}
-
-impl TransactionRangeIterator {
-    pub(crate) fn new(inner: UnboundedIterator, range: OpenKeyRange<Vec<u8>>) -> Self {
-        let mut iter = Self { inner, range };
-
-        iter.from_start();
-
-        iter
-    }
-}
-
-impl RocksIterator for TransactionRangeIterator {
-    fn from_start(&mut self) {
-        match self.range.start() {
-            Some(start) => self.inner.from_key(start),
-            None => self.inner.from_start(),
-        };
-    }
-
-    fn from_end(&mut self) {
-        match self.range.end() {
-            Some(end) => {
-                // `from_key_reverse` will put the iterator on `end` if that key exists.
-                // That's not what we want because our `get_current` will see that `end` it outside
-                // of the range and return `None` instead of the record.
-                //
-                // Detect that case and iterate back one.
-                self.inner.from_key_reverse(end);
-
-                unsafe {
-                    match self.inner.get_current() {
-                        Ok(Some((e, _))) if e == end => {
-                            self.inner.advance();
-                        }
-                        _ => (),
-                    };
-                }
-            }
-            None => self.inner.from_end(),
-        };
-    }
-
-    fn from_key(&mut self, from: impl BinaryStr) {
-        assert!(
-            self.range.is_in_range(&from),
-            "calling `from_key` with a key outside the iteration range is undefined"
-        );
-        self.inner.from_key(from);
-    }
-
-    fn from_key_reverse(&mut self, from: impl BinaryStr) {
-        assert!(
-            self.range.is_in_range(&from),
-            "calling `from_key_reverse` with a key outside the iteration range is undefined"
-        );
-        self.inner.from_key_reverse(from);
-    }
-
-    fn seek(&mut self, key: impl BinaryStr) {
-        assert!(
-            self.range.is_in_range(&key),
-            "calling `seek` with a key outside the iteration range is undefined"
-        );
-        self.inner.seek(key);
-    }
-
-    fn seek_for_prev(&mut self, key: impl BinaryStr) {
-        assert!(
-            self.range.is_in_range(&key),
-            "calling `seek_for_prev` with a key outside the iteration range is undefined"
-        );
-        self.inner.seek_for_prev(key);
-    }
-
-    fn valid(&self) -> bool {
-        // In addition to the internal test for validity, also report the iterator invalid if it's
-        // moved outside of the specified range.
-        self.inner.valid() && unsafe { self.range.is_in_range(&self.inner.raw_iter.key().unwrap()) }
-    }
-
-    fn status(&self) -> Result<()> {
-        self.inner.status()
-    }
-
-    unsafe fn get_current(&self) -> Result<Option<(&[u8], &[u8])>> {
-        let current = self.inner.get_current();
-        let range = &self.range;
-
-        current.map(|opt_current| {
-            opt_current.and_then(|(key, value)| {
-                if range.is_in_range(&key) {
-                    Some((key, value))
-                } else {
-                    None
-                }
-            })
-        })
-    }
-
-    fn advance(&mut self) {
-        self.inner.advance()
-    }
-}
-
 /// Internal wrapper around the Rocks iterator C FFI
 struct RawIterator {
     inner: IteratorHandle,
@@ -541,11 +421,6 @@ impl RawIterator {
         unsafe {
             ffi::rocksdb_iter_prev(self.inner.as_ptr());
         }
-    }
-
-    pub unsafe fn key(&self) -> Option<&[u8]> {
-        self.key_inner()
-            .map(|(ptr, len)| std::slice::from_raw_parts(ptr, len))
     }
 
     /// Returns a slice to the internal buffer storing the current key.
@@ -956,69 +831,6 @@ mod test {
             tx_iter.seek_for_prev(u64_to_bytes(15));
             assert_eq!(iter_to_vec(db_iter)?, iter_to_vec(tx_iter)?);
         }
-
-        Ok(())
-    }
-
-    /// Verifies that, absent our polyfill, the Rocks iterator on a transaction ignores range
-    /// parameters when creating an iterator.
-    ///
-    /// Hopefully some day https://github.com/facebook/rocksdb/issues/2343 is fixed and this test
-    /// breaks.  If that happens, rejoice, delete the `TransactionRangeIterator`, and simplify the
-    /// iterator code immensely!
-    #[test]
-    fn rocks_tx_iterator_doesnt_support_range() -> Result<()> {
-        let path = TempDbPath::new();
-        let db = TransactionDb::open(&path, None)?;
-        let cf = db.get_cf("default").unwrap();
-
-        let tx = db.begin_trans(None, None)?;
-
-        let expected_pairs: Vec<(&[u8], &[u8])> = vec![
-            (b"baz1", b"boo1"),
-            (b"baz2", b"boo2"),
-            (b"baz3", b"boo3"),
-            (b"foo1", b"bar1"),
-            (b"foo2", b"bar2"),
-            (b"foo3", b"bar3"),
-            (b"zip1", b"zub1"),
-        ];
-
-        // Insert the data within the context of a transaction
-        for (key, value) in &expected_pairs {
-            tx.put(&cf, key, value, None)?;
-        }
-
-        // The `IterateRange` trait implementation for transactions will use a Rust-based polyfill,
-        // but we can force the use of Rocks native range iteration by putting the range in the
-        // ReadOptions passed to iterate_all.  Caution kids, don't try this at home.
-        let range: OpenKeyRange<_> = (b"baz2", b"baz5").into();
-        let range = range.to_owned().into_raw_parts();
-        let mut options = ReadOptions::default();
-        range.set_read_options_bounds(&mut options);
-
-        // yes `range` will leak if either of these lines fail; who cares it's a test?
-        let iter = tx.iterate_all(&cf, options)?;
-        let iterated_pairs = iter_to_vec(iter)?;
-        let range = unsafe { OpenKeyRange::from_raw_parts(range) };
-
-        // Even though we specified a range of keys in the read options, we get the entire CF
-        assert_eq_pairs(&expected_pairs, &iterated_pairs);
-
-        // Yet if we use the `IterateRange` trait we'll get a polyfill that actually does contrain
-        // the iterator correctly
-        let iter = tx.iterate_range(&cf, None, range.clone())?;
-        assert!(iter.valid());
-        let iterated_pairs = iter_to_vec(iter)?;
-        assert_eq_pairs(&[(b"baz2", b"boo2"), (b"baz3", b"boo3")], &iterated_pairs);
-
-        // And commiting the transaction doing a range iterate with the database, we get the same
-        // result.
-        tx.commit()?;
-
-        let iter = db.iterate_range(&cf, None, range)?;
-        let iterated_pairs = iter_to_vec(iter)?;
-        assert_eq_pairs(&[(b"baz2", b"boo2"), (b"baz3", b"boo3")], &iterated_pairs);
 
         Ok(())
     }
