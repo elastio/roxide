@@ -3585,7 +3585,7 @@ impl ReadOptions {
     ///
     /// ```
     /// let mut options = roxide_rocksdb::ReadOptions::default();
-    /// options.set_iterate_range(rocksdb::PrefixRange("xy".as_bytes()));
+    /// options.set_iterate_range(roxide_rocksdb::PrefixRange("xy".as_bytes()));
     /// ```
     ///
     /// Note that setting range using this method is separate to using prefix
