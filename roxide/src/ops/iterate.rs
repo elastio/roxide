@@ -391,6 +391,8 @@ impl IterateInternal for Db {
     }
 }
 
+impl DefaultIterateRange for Db {}
+
 impl IterateInternal for TransactionDb {
     type InternalRangeIter = DbRangeIterator;
     type InternalPrefixIter = UnboundedIterator;
@@ -409,6 +411,8 @@ impl IterateInternal for TransactionDb {
         Ok(iterator_ptr)
     }
 }
+
+impl DefaultIterateRange for TransactionDb {}
 
 impl IterateInternal for OptimisticTransactionDb {
     type InternalRangeIter = DbRangeIterator;
@@ -430,6 +434,8 @@ impl IterateInternal for OptimisticTransactionDb {
         })
     }
 }
+
+impl DefaultIterateRange for OptimisticTransactionDb {}
 
 /// Implement IterateAll for the types that support `IteratePrefix` (meaning the
 /// `iterate_with_prefix_hint` functions should actually tell Rocks about the prefix).
@@ -466,8 +472,13 @@ impl<
     }
 }
 
-/// Implement range iteration for all of the DB-based impls of `IterateInternal`
-impl<T: IterateInternal<InternalRangeIter = DbRangeIterator>> IterateRange for T {
+/// Marker trait for default `IterateRange` implementation.
+trait DefaultIterateRange {}
+
+/// Implement range iteration for DB-based impls of `IterateInternal` marked with `DefaultIterateRange`.
+impl<T: IterateInternal<InternalRangeIter = DbRangeIterator> + DefaultIterateRange> IterateRange
+    for T
+{
     type RangeIter = DbRangeIterator;
 
     fn iterate_range<K: BinaryStr>(
@@ -679,12 +690,14 @@ impl IterateInternal for unsync::Transaction {
     }
 }
 
-/// The defautl impl of `IterateAll` is sufficient, because it defaults to using `iterate_all` for
+impl DefaultIterateRange for unsync::Transaction {}
+
+/// The default impl of `IterateAll` is sufficient, because it defaults to using `iterate_all` for
 /// iterating with a prefix hint
 impl IterateAll for unsync::Transaction {}
 
 // The implementation for the thread-safe `Transaction` is just a wrapper around the
-// `unsync::Transaction` implementation so it takes a rather different form.
+// `unsync::Transaction` implementation, so it takes a rather different form.
 impl IterateInternal for sync::Transaction {
     type InternalRangeIter = <unsync::Transaction as IterateInternal>::InternalRangeIter;
     type InternalPrefixIter = <unsync::Transaction as IterateInternal>::InternalPrefixIter;
@@ -722,6 +735,40 @@ impl IterateInternal for sync::Transaction {
                 let options = options.into();
                 let cf = cf.clone();
                 self.async_with_tx(move |tx| tx.internal_iterate_all(&cf, options))
+            },
+        )
+    }
+}
+
+impl IterateRange for sync::Transaction {
+    type RangeIter = <unsync::Transaction as IterateRange>::RangeIter;
+
+    fn iterate_range<K: BinaryStr>(
+        &self,
+        cf: &impl db::ColumnFamilyLike,
+        options: impl Into<Option<ReadOptions>>,
+        key_range: impl Into<OpenKeyRange<K>>,
+    ) -> Result<Self::RangeIter> {
+        self.with_tx(move |tx| tx.iterate_range(cf, options, key_range))
+    }
+
+    fn async_iterate_range<K: BinaryStr + Send + 'static>(
+        &self,
+        cf: &impl db::ColumnFamilyLike,
+        options: impl Into<Option<ReadOptions>>,
+        key_range: impl Into<OpenKeyRange<K>>,
+    ) -> op_metrics::AsyncOpFuture<Self::RangeIter>
+    where
+        <Self as RocksOpBase>::HandleType: Sync,
+    {
+        op_metrics::instrument_async_cf_op(
+            cf,
+            op_metrics::ColumnFamilyOperation::AsyncWrapper,
+            move |_reporter| {
+                let cf = cf.clone();
+                let options = options.into();
+                let key_range = key_range.into();
+                self.async_with_tx(move |tx| tx.iterate_range(&cf, options, key_range))
             },
         )
     }
