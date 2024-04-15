@@ -391,7 +391,7 @@ impl IterateInternal for Db {
     }
 }
 
-impl AutoIterateRange for Db {}
+impl DefaultIterateRange for Db {}
 
 impl IterateInternal for TransactionDb {
     type InternalRangeIter = DbRangeIterator;
@@ -412,7 +412,7 @@ impl IterateInternal for TransactionDb {
     }
 }
 
-impl AutoIterateRange for TransactionDb {}
+impl DefaultIterateRange for TransactionDb {}
 
 impl IterateInternal for OptimisticTransactionDb {
     type InternalRangeIter = DbRangeIterator;
@@ -435,7 +435,7 @@ impl IterateInternal for OptimisticTransactionDb {
     }
 }
 
-impl AutoIterateRange for OptimisticTransactionDb {}
+impl DefaultIterateRange for OptimisticTransactionDb {}
 
 /// Implement IterateAll for the types that support `IteratePrefix` (meaning the
 /// `iterate_with_prefix_hint` functions should actually tell Rocks about the prefix).
@@ -472,11 +472,11 @@ impl<
     }
 }
 
-/// Marker trait for automatic `IterateRange` implementation.
-trait AutoIterateRange {}
+/// Marker trait for default `IterateRange` implementation.
+trait DefaultIterateRange {}
 
-/// Implement range iteration for DB-based impls of `IterateInternal` marked with `AutoIterateRange`.
-impl<T: IterateInternal<InternalRangeIter = DbRangeIterator> + AutoIterateRange> IterateRange
+/// Implement range iteration for DB-based impls of `IterateInternal` marked with `DefaultIterateRange`.
+impl<T: IterateInternal<InternalRangeIter = DbRangeIterator> + DefaultIterateRange> IterateRange
     for T
 {
     type RangeIter = DbRangeIterator;
@@ -690,7 +690,7 @@ impl IterateInternal for unsync::Transaction {
     }
 }
 
-impl AutoIterateRange for unsync::Transaction {}
+impl DefaultIterateRange for unsync::Transaction {}
 
 /// The default impl of `IterateAll` is sufficient, because it defaults to using `iterate_all` for
 /// iterating with a prefix hint
