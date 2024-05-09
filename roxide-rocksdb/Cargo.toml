@@ -1,7 +1,7 @@
 [package]
 name = "roxide-rocksdb"
 description = "Elastio's fork of `rocksdb` crate which `roxide` wraps and makes more Rust-y"
-version = "8.1.0"
+version = "8.1.1-dev"
 edition = "2021"
 authors = [
     "Tyler Neely <t@jujit.su>",
@@ -30,8 +30,15 @@ serde1 = ["serde"]
 
 [dependencies]
 libc = "0.2"
-roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys" , version = "8.1.0", registry = "elastio-private" }
+roxide-librocksdb-sys = { path = "../roxide-librocksdb-sys" }
 serde = { version = "1", features = [ "derive" ], optional = true }
+
+[dev-dependencies]
+trybuild = "1.0"
+tempfile = "3.1"
+pretty_assertions = "1"
+bincode = "1.3"
+serde = { version = "1", features = [ "derive" ] }
 
 # clippy was never run on the rust-rocksdb code, and once it was brought into the same repo with
 # `roxide` issues appeared.  It's not a good use of time to fix this third-party code now
