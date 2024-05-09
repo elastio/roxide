@@ -289,12 +289,16 @@ skip = [
     { name = "dashmap", version = "=4.0.2" },
 
     # Comes from roxide -> elasyncio@3.1.0
-    # Direct parents: tempfile@3.8.0
-    { name = "redox_syscall", version = "=0.3.5" },
-
-    # Comes from roxide -> elasyncio@3.1.0
     # Direct parents: procfs@0.14.2
     { name = "rustix", version = "=0.36.16" },
+
+    # Comes from roxide -> elasyncio@3.1.0
+    # Direct parents: reqwest@0.11.27, rustls-pemfile@1.0.4
+    { name = "base64", version = "=0.21.7" },
+
+    # Comes from roxide -> elasyncio@3.1.0
+    # Direct parents: whoami@1.5.1
+    { name = "redox_syscall", version = "=0.4.1" },
 ]
 deny = []
 
