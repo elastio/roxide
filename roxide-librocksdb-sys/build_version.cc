@@ -8,17 +8,18 @@
 
 // The build script may replace these values with real values based
 // on whether or not GIT is available and the platform settings
-static const std::string rocksdb_build_git_sha  = "rocksdb_build_git_sha:f4441966592636253fd5ab0bb9ed44fc2697fc53";
-static const std::string rocksdb_build_git_tag = "rocksdb_build_git_tag:v9.0.0";
+static const std::string rocksdb_build_git_sha  = "rocksdb_build_git_sha:26216dd76d057ef11c7434d863d5f5c99bbee3e8";
+// This branch in elastio fork contains a fix for https://github.com/elastio/scalez/issues/628
+static const std::string rocksdb_build_git_tag = "rocksdb_build_git_tag:elastio-v9.0.0-checkpoint-patch";
 #define HAS_GIT_CHANGES 0
 #if HAS_GIT_CHANGES == 0
 // If HAS_GIT_CHANGES is 0, the GIT date is used.
 // Use the time the branch/tag was last modified
-static const std::string rocksdb_build_date = "rocksdb_build_date:2024-03-11 11:26:24";
+static const std::string rocksdb_build_date = "rocksdb_build_date:2024-05-03 17:27:38";
 #else
 // If HAS_GIT_CHANGES is > 0, the branch/tag has modifications.
 // Use the time the build was created.
-static const std::string rocksdb_build_date = "rocksdb_build_date:2024-04-11 19:15:23";
+static const std::string rocksdb_build_date = "rocksdb_build_date:2024-05-09 15:05:14";
 #endif
 
 extern "C" {
