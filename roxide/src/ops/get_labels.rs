@@ -10,11 +10,13 @@ use crate::db::ColumnFamilyLike;
 use crate::db::DbLike;
 use crate::labels;
 
+#[allow(dead_code)]
 pub(crate) trait GetDbLabels {
     fn get_db_labels(&self) -> labels::DatabaseLabels;
     fn get_db_op_labels(&self, op_name: &'static str) -> labels::DatabaseOperationLabels;
 }
 
+#[allow(dead_code)]
 pub(crate) trait GetColumnFamilyLabels {
     fn get_cf_labels(&self) -> labels::ColumnFamilyLabels;
     fn get_cf_op_labels(&self, op_name: &'static str) -> labels::ColumnFamilyOperationLabels;

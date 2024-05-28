@@ -968,7 +968,7 @@ mod test {
             /// in the presence of conflicts.
             ///
             /// This is generic over the actual database type, as long as it supports transactions.
-            fn conflict_impl(db: impl DbLike + BeginTrans) -> Result<()> {
+            fn conflict_impl(db: impl BeginTrans) -> Result<()> {
                 let cf = db.get_cf("default").unwrap();
                 let keys = generate_test_keys();
 
@@ -1012,12 +1012,12 @@ mod test {
 
             /// Async version of `conflig_impl`
             #[allow(clippy::async_yields_async)] // The `async` block yielding a future is needed here to satisfy the borrow checker
-            async fn conflict_impl_async<DBT: DbLike + BeginTrans>(db: DBT) -> Result<()>
+            async fn conflict_impl_async<DBT>(db: DBT) -> Result<()>
             where
                 <DBT as RocksOpBase>::HandleType: Sync + Send,
                 DBT::TransactionOptionsType: Send + 'static,
                 DBT::TransactionOptionsNativeType: 'static,
-                DBT: Sync + Clone + 'static,
+                DBT: DbLike + BeginTrans + Sync + Clone + 'static,
             {
                 let cf = db.get_cf("default").unwrap();
                 let keys = generate_test_keys();
@@ -1163,7 +1163,7 @@ mod test {
             ///
             /// This is generic over the actual database type, as long as it supports transactions.
             #[allow(clippy::float_cmp)] // Testing that the sum is != 0 is the correct assertion here
-            fn no_conflicts_impl(db: impl DbLike + BeginTrans) -> Result<()> {
+            fn no_conflicts_impl(db: impl BeginTrans) -> Result<()> {
                 let cf = db.get_cf("default").unwrap();
 
                 let mut all_keys =

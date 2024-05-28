@@ -101,15 +101,9 @@ private:
 /// passing it to a closure.
 ///
 /// If this database doesn't have a configured logger, passes `None` to the closure.
-pub(crate) unsafe fn temp_logger_from_raw_db_ptr<
-    R,
-    F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R,
->(
-    db_ptr: *mut std::ffi::c_void,
-    func: F,
-) -> R
+pub(crate) unsafe fn temp_logger_from_raw_db_ptr<R, F>(db_ptr: *mut std::ffi::c_void, func: F) -> R
 where
-    F: std::panic::UnwindSafe,
+    F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R + std::panic::UnwindSafe,
 {
     let cpp_logger_ptr = cpp!([db_ptr as "rocksdb::DB*"] -> *mut std::ffi::c_void as "void*" {
         std::string id;
@@ -172,6 +166,7 @@ static JSON_EVENT_PREFIX: &str = "EVENT_LOG_v1 ";
 pub trait LoggingContext: LabelSet + AsSpan {
     /// Gets a copy of the fields in this context, in a `HashMap`.  This is mostly intended for
     /// testing.
+    #[allow(dead_code)]
     fn fields(&self) -> HashMap<String, String> {
         // LabelSet already exposes all labels as a hash map.  Just need to convert the keys and
         // values into owned strings
@@ -524,12 +519,12 @@ impl CppLoggerWrapper {
     /// this pointer isn't valid you'll get nasty UBF), and passes that boxed logger to a closure.
     ///
     /// This closure can call methods on that logger but it cannot take ownership.
-    pub(crate) unsafe fn with_raw_boxed_logger<R, F: FnOnce(&(dyn RocksDbLogger + 'static)) -> R>(
+    pub(crate) unsafe fn with_raw_boxed_logger<R, F>(
         logger_ptr: *mut std::ffi::c_void,
         func: F,
     ) -> R
     where
-        F: std::panic::UnwindSafe,
+        F: FnOnce(&(dyn RocksDbLogger + 'static)) -> R + std::panic::UnwindSafe,
     {
         Self::temp_from_raw_void(logger_ptr, move |wrapper| {
             wrapper.with_inner(|inner: &Arc<_>| {
