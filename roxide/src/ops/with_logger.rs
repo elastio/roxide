@@ -9,15 +9,15 @@ pub(crate) trait WithLogger {
     /// If the object is associated with a C++ RocksDB logger which wraps a Rust implementation in
     /// the form of `RocksDbLogger`, then calls a closure with a reference to that logger, or
     /// `None` if no such logger is configured.
-    fn with_logger<R, F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R>(&self, func: F) -> R
+    fn with_logger<R, F>(&self, func: F) -> R
     where
-        F: std::panic::UnwindSafe;
+        F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R + std::panic::UnwindSafe;
 }
 
 impl<DB: GetDbPtr> WithLogger for DB {
-    fn with_logger<R, F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R>(&self, func: F) -> R
+    fn with_logger<R, F>(&self, func: F) -> R
     where
-        F: std::panic::UnwindSafe,
+        F: FnOnce(Option<&(dyn RocksDbLogger + 'static)>) -> R + std::panic::UnwindSafe,
     {
         let db_ptr = <Self as crate::ops::GetDbPtr>::get_db_ptr(self);
 

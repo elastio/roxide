@@ -52,6 +52,7 @@ pub unsafe trait RocksClassSend: RocksClass {}
 /// threads.  If this is implemented, then the corresponding `Handle` and `ArcHandle` types will
 /// also be `Sync`
 #[allow(clippy::missing_safety_doc)]
+#[allow(dead_code)]
 pub unsafe trait RocksClassSync: RocksClass {}
 
 /// A `Handle` is a type that wraps a pointer to one of the RocksDB FFI structs, like `rocksdb_t*`
