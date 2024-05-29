@@ -657,7 +657,7 @@ impl DbOptions {
         partial_merge_fn: Option<Arc<dyn merge::MergeFn>>,
     ) -> Result<()> {
         let cf_name = cf_name.to_string();
-        if self.column_families.get(&cf_name).is_none() {
+        if !self.column_families.contains_key(&cf_name) {
             Err(Error::other_error(format!(
                 "Column family '{}' not found",
                 cf_name
@@ -1582,9 +1582,9 @@ pub trait OptionsExt {
     /// that impl to a closure for additional customization.
     ///
     /// If there is no logger configured, `None` is passed to the closure.
-    fn with_logger<R, F: FnOnce(Option<&dyn logging::RocksDbLogger>) -> R>(&mut self, func: F) -> R
+    fn with_logger<R, F>(&mut self, func: F) -> R
     where
-        F: std::panic::UnwindSafe,
+        F: FnOnce(Option<&dyn logging::RocksDbLogger>) -> R + std::panic::UnwindSafe,
     {
         let options_ptr = self.inner_logger();
         let raw_logger_ptr = unsafe {

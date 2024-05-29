@@ -347,8 +347,6 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
     /// Returns a reference to the internal `DynTraitArc` object
     fn inner(&self) -> &DynTraitArc<T>;
 
-    fn inner_mut(&mut self) -> &mut DynTraitArc<T>;
-
     /// Consume the struct and return a C pointer for passing the wrapped trait object into C code
     fn into_raw_void(self) -> *mut std::ffi::c_void {
         self.unwrap().into_raw_void()
@@ -374,9 +372,9 @@ pub(crate) trait DynTraitWrapper<T: ?Sized + 'static>: Sized {
 
     /// Temporarily convert a raw void pointer to a mutable reference to the wrapper, pass it to a
     /// closure, then immediately put it back to being a raw pointer again.
-    unsafe fn temp_from_raw_void<R, F: FnOnce(&Self) -> R>(raw: *mut std::ffi::c_void, func: F) -> R
+    unsafe fn temp_from_raw_void<R, F>(raw: *mut std::ffi::c_void, func: F) -> R
     where
-        F: std::panic::UnwindSafe,
+        F: FnOnce(&Self) -> R + std::panic::UnwindSafe,
         Self: std::panic::RefUnwindSafe,
     {
         let me = Self::from_raw_void(raw);
@@ -485,10 +483,6 @@ macro_rules! make_dyn_trait_wrapper {
 
             fn inner(&self) -> &$crate::ffi_util::DynTraitArc<dyn $trait_type + 'static> {
                 &self.0
-            }
-
-            fn inner_mut(&mut self) -> &mut $crate::ffi_util::DynTraitArc<dyn $trait_type + 'static> {
-                &mut self.0
             }
         }
 

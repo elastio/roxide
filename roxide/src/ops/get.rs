@@ -45,6 +45,10 @@ unsafe fn raw_multi_get_impl<K: BinaryStr>(
     // Keed all of the keys in a contiguous vector to use MultiGet
     let keys = keys.into_iter().collect::<Vec<_>>();
     let num_keys = keys.len();
+    if num_keys == 0 {
+        return Ok(Vec::new());
+    }
+
     let cf_ptr = cf.as_ptr();
     let options_ptr = options.as_ptr();
 
@@ -1199,6 +1203,15 @@ mod test {
             );
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn multi_get_empty() -> Result<()> {
+        let path = TempDbPath::new();
+        let db = Db::open(&path, None)?;
+        let cf = db.get_cf("default").unwrap();
+        let _ = db.multi_get(&cf, std::iter::empty::<[u8; 0]>(), None)?;
         Ok(())
     }
 }
