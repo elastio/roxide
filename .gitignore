@@ -1,5 +1,6 @@
 *.swo
 target
+**/build
 Cargo.lock
 *.orig
 *.bk
